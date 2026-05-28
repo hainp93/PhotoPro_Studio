@@ -1,0 +1,55 @@
+# PhotoPro Studio
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# --- AI Model Weights (download khi chạy, không commit) ---
+weights/
+*.pth
+*.ckpt
+*.safetensors
+*.pt
+*.onnx
+
+# --- Output & Temp ---
+output/
+temp/
+*.tmp
+
+# --- Sample images (user tự add) ---
+sample_images/*.jpg
+sample_images/*.jpeg
+sample_images/*.png
+sample_images/*.tif
+sample_images/*.tiff
+sample_images/*.webp
+sample_images/*.NEF
+sample_images/*.CR2
+sample_images/*.ARW
+
+# --- Presets (user tự tạo, không ghi đè) ---
+presets/user_*.json
+
+# --- Config cá nhân ---
+config/user_config.json
+
+# --- Build output ---
+dist/
+build/
+*.spec.bak
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Logs ---
+*.log
+event_log.txt
+
+# --- PyInstaller ---
+*.manifest
