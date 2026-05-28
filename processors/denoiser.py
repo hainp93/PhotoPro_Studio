@@ -47,12 +47,9 @@ class Denoiser:
         # Denoise color channels (A, B) — giảm color noise
         if color_strength > 0:
             hColor = int(color_strength)
-            ab_combined = np.stack([a_channel, b_channel], axis=2)
-            # Dùng colorfastNlMeans trên BGR → convert trick
-            bgr_color = cv2.cvtColor(image, cv2.COLOR_BGR2BGR)  # same
             ab_denoised_bgr = cv2.fastNlMeansDenoisingColored(
                 image,
-                h=1,          # lum minimal
+                h=1,          # lum minimal (luminance đã xử lý riêng)
                 hColor=hColor,
                 templateWindowSize=7,
                 searchWindowSize=21,
