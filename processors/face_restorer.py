@@ -109,34 +109,33 @@ class FaceRestorer:
         self._net = net
         logger.info("✅ CodeFormer loaded")
 
-        # ── RealESRGAN background upsampler ───────────────────────────
-        if use_bg_upscale:
-            try:
-                from basicsr.archs.rrdbnet_arch import RRDBNet
-                from basicsr.utils.realesrgan_utils import RealESRGANer
+        # ── RealESRGAN upsampler (dùng cho cả Face và Background) ───────────────────────────
+        try:
+            from basicsr.archs.rrdbnet_arch import RRDBNet
+            from basicsr.utils.realesrgan_utils import RealESRGANer
 
-                esrgan_path = _resolve_weight("realesrgan", "RealESRGAN_x2plus.pth")
-                if not esrgan_path:
-                    raise FileNotFoundError("RealESRGAN_x2plus.pth không tìm thấy")
+            esrgan_path = _resolve_weight("realesrgan", "RealESRGAN_x2plus.pth")
+            if not esrgan_path:
+                raise FileNotFoundError("RealESRGAN_x2plus.pth không tìm thấy")
 
-                bg_model = RRDBNet(
-                    num_in_ch=3, num_out_ch=3, num_feat=64,
-                    num_block=23, num_grow_ch=32, scale=2,
-                )
-                self._bg_upsampler = RealESRGANer(
-                    scale=2,
-                    model_path=esrgan_path,
-                    model=bg_model,
-                    tile=0,           # 0 = no tile, dùng toàn VRAM (OK với RTX 5090 16GB)
-                    tile_pad=40,
-                    pre_pad=0,
-                    half=use_half,
-                    device=device,
-                )
-                logger.info("✅ RealESRGAN x2 background upsampler loaded")
-            except Exception as e:
-                logger.warning(f"RealESRGAN không load được: {e}. Bỏ qua background upscale.")
-                self._bg_upsampler = None
+            bg_model = RRDBNet(
+                num_in_ch=3, num_out_ch=3, num_feat=64,
+                num_block=23, num_grow_ch=32, scale=2,
+            )
+            self._bg_upsampler = RealESRGANer(
+                scale=2,
+                model_path=esrgan_path,
+                model=bg_model,
+                tile=0,           # 0 = no tile, dùng toàn VRAM (OK với RTX 5090 16GB)
+                tile_pad=40,
+                pre_pad=0,
+                half=use_half,
+                device=device,
+            )
+            logger.info("✅ RealESRGAN x2 upsampler loaded")
+        except Exception as e:
+            logger.warning(f"RealESRGAN không load được: {e}. Bỏ qua face/bg upscale.")
+            self._bg_upsampler = None
 
         self._loaded = True
 
@@ -175,7 +174,9 @@ class FaceRestorer:
         self._current_upsample = upsample
         self._current_bg_upscale = bg_upscale
         
-        self.face_helper = self._get_face_helper(upscale=2 if upsample else 1, device=device)
+        # upscale xác định scale của background
+        target_bg_scale = 2 if bg_upscale else 1
+        self.face_helper = self._get_face_helper(upscale=target_bg_scale, device=device)
         self.face_helper.clean_all()
         self.face_helper.read_image(image)
 
@@ -294,11 +295,32 @@ class FaceRestorer:
 
         # Paste restored faces vào background
         if self._current_upsample and self._bg_upsampler:
-            result = self.face_helper.paste_faces_to_input_image(
-                upsample_img=bg_img,
-                draw_box=False,
-                face_upsampler=self._bg_upsampler,
-            )
+            import cv2
+            original_factor = self.face_helper.upscale_factor
+            # Ép dùng outscale=2 cho face_upsampler để khuôn mặt đạt 1024x1024 siêu nét
+            self.face_helper.upscale_factor = max(2, original_factor)
+            
+            original_warpAffine = cv2.warpAffine
+            def custom_warpAffine(src, M, dsize, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0):
+                # Sửa lỗi toán học của thư viện facelib: khi face được upscale lên 1024x1024
+                # nhưng background không được upscale tương ứng (hoặc affine matrix lệch)
+                # Ta phải chia tỷ lệ ma trận M cho 2.
+                if getattr(src, 'shape', None) is not None and src.shape[0] == 1024 and src.shape[1] == 1024 and M.shape == (2, 3):
+                    M_fixed = M / 2.0
+                    return original_warpAffine(src, M_fixed, dsize, flags=flags, borderMode=borderMode, borderValue=borderValue)
+                return original_warpAffine(src, M, dsize, flags=flags, borderMode=borderMode, borderValue=borderValue)
+            
+            cv2.warpAffine = custom_warpAffine
+            
+            try:
+                result = self.face_helper.paste_faces_to_input_image(
+                    upsample_img=bg_img,
+                    draw_box=False,
+                    face_upsampler=self._bg_upsampler,
+                )
+            finally:
+                cv2.warpAffine = original_warpAffine
+                self.face_helper.upscale_factor = original_factor
         else:
             result = self.face_helper.paste_faces_to_input_image(
                 upsample_img=bg_img,
