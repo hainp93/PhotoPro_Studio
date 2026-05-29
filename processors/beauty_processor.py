@@ -182,31 +182,44 @@ class BeautyProcessor:
             
             disp_x += dx * slim_factor * factor
         
-        # Warp toàn bộ ảnh với displacement đầy đủ (KHÔNG nhân với mask)
+        # ── Lấy person mask ──────────────────────────────────────────────────
+        person_mask = self._get_person_mask(img)
+        # Mask nhị phân cho inpaint (dãn nhẹ để phủ toàn bộ người)
+        mask_binary = (person_mask > 0.25).astype(np.uint8) * 255
+        dilate_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        mask_dilated = cv2.dilate(mask_binary, dilate_k)
+
+        # ── Bước 1: Tạo nền sạch bằng inpainting ────────────────────────────
+        # Inpaint ở 1/4 kích thước để nhanh (nền chỉ cần chất lượng vừa)
+        scale = 0.25
+        small_h, small_w = int(h * scale), int(w * scale)
+        img_small   = cv2.resize(img, (small_w, small_h), interpolation=cv2.INTER_AREA)
+        mask_small  = cv2.resize(mask_dilated, (small_w, small_h), interpolation=cv2.INTER_NEAREST)
+        # Đảm bảo mask là uint8 0-255
+        mask_small = np.clip(mask_small, 0, 255).astype(np.uint8)
+        bg_small    = cv2.inpaint(img_small, mask_small, inpaintRadius=7, flags=cv2.INPAINT_TELEA)
+        # Upscale nền về kích thước gốc
+        bg_inpainted = cv2.resize(bg_small, (w, h), interpolation=cv2.INTER_LINEAR)
+        logger.debug(f"Inpainted background: {small_w}x{small_h} → {w}x{h}")
+
+        # ── Bước 2: Warp người với displacement đầy đủ ───────────────────────
         map_x_full = x_coords.astype(np.float32) + disp_x
         map_y_full = y_coords.astype(np.float32)
-        warped_full = cv2.remap(img, map_x_full, map_y_full,
-                                interpolation=cv2.INTER_LINEAR,
-                                borderMode=cv2.BORDER_REFLECT)
-        
-        # Lấy person mask để composite
-        person_mask = self._get_person_mask(img)
-        
-        # Erode để mask nằm gọn trong người, tránh lan ra nền
-        erode_px = max(3, int(min(img.shape[:2]) * 0.008))
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1))
-        person_mask_eroded = cv2.erode(person_mask, kernel, iterations=1)
-        person_mask_feather = cv2.GaussianBlur(person_mask_eroded, (31, 31), 0)
-        
-        # ✅ Composite đúng cách:
-        #   - Person pixels → từ warped_full (đã được slim)
-        #   - Background pixels → từ img gốc (KHÔNG bao giờ bị displaced)
-        # Khác hoàn toàn với cách cũ (blend displacement):
-        #   Cũ: map_x = x + disp * mask → vẫn lấy bg từ vị trí bị dịch chuyển một phần
-        #   Mới: result = mask * warped + (1-mask) * img → bg luôn = img[y,x] gốc
-        mask_3d = np.repeat(person_mask_feather[:, :, np.newaxis], 3, axis=2)
-        result = (img.astype(np.float32) * (1.0 - mask_3d) +
-                  warped_full.astype(np.float32) * mask_3d).astype(np.uint8)
+        warped_person = cv2.remap(img, map_x_full, map_y_full,
+                                  interpolation=cv2.INTER_LINEAR,
+                                  borderMode=cv2.BORDER_REFLECT)
+
+        # ── Bước 3: Composite warped person + inpainted background ───────────
+        # Erode + blur mask cho feathered edge mịn
+        erode_px = max(3, int(min(h, w) * 0.005))
+        erode_k  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1))
+        mask_eroded  = cv2.erode(person_mask, erode_k, iterations=1)
+        mask_feather = cv2.GaussianBlur(mask_eroded, (21, 21), 0)
+        mask_3d = np.repeat(mask_feather[:, :, np.newaxis], 3, axis=2)
+
+        # Kết quả = người_slim đè lên nền đã inpaint → không ghost, không warp nền
+        result = (bg_inpainted.astype(np.float32) * (1.0 - mask_3d) +
+                  warped_person.astype(np.float32) * mask_3d).astype(np.uint8)
         return result
 
     def apply_leg_stretch(self, img: np.ndarray, stretch_pct: float) -> np.ndarray:
