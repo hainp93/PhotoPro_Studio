@@ -210,14 +210,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         #     self._upscale_on.select()
         self._upscale_on.pack(anchor="w", pady=(2, 4))
 
-        # Scale factor
+        # Scale factor / Target size
         ctk.CTkLabel(
             c, text="Scale factor",
             font=("Inter", 11), text_color=TEXT_SECONDARY, anchor="w",
         ).pack(fill="x", pady=(2, 1))
         self._scale_var = ctk.StringVar(value="2x")
         scale_row = ctk.CTkFrame(c, fg_color="#1e1e3a", corner_radius=6)
-        scale_row.pack(fill="x", pady=(0, 4))
+        scale_row.pack(fill="x", pady=(0, 2))
         for s in ["2x", "4x"]:
             ctk.CTkRadioButton(
                 scale_row, text=s, variable=self._scale_var, value=s,
@@ -225,6 +225,28 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                 radiobutton_width=16, radiobutton_height=16,
                 fg_color=ACCENT, hover_color=ACCENT,
             ).pack(side="left", padx=12, pady=6)
+
+        # Target long-side (custom pixel output)
+        target_row = ctk.CTkFrame(c, fg_color="transparent")
+        target_row.pack(fill="x", pady=(0, 4))
+        self._upscale_target_on = ctk.CTkSwitch(
+            target_row, text="Giới hạn cạnh dài (px)",
+            font=("Inter", 11), text_color=TEXT_SECONDARY,
+            button_color=ACCENT, button_hover_color=ACCENT, progress_color=ACCENT,
+            onvalue=True, offvalue=False,
+        )
+        self._upscale_target_on.pack(side="left", padx=(0, 8))
+        self._upscale_target_px = ctk.CTkEntry(
+            target_row, width=70, height=26,
+            font=("Inter", 11), placeholder_text="6000",
+            fg_color="#1e1e3a", border_color="#353570", text_color=TEXT_PRIMARY,
+        )
+        self._upscale_target_px.insert(0, "6000")
+        self._upscale_target_px.pack(side="left")
+        ctk.CTkLabel(
+            target_row, text="px",
+            font=("Inter", 11), text_color=TEXT_SECONDARY,
+        ).pack(side="left", padx=(4, 0))
 
         # Model
         ctk.CTkLabel(
@@ -472,6 +494,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             upscale_enabled=bool(self._upscale_on.get()),
             upscale_factor=scale,
             upscale_model=self._model_var.get(),
+            upscale_max_long_side=(
+                int(self._upscale_target_px.get() or 6000)
+                if self._upscale_target_on.get() else 0
+            ),
             sharpen_enabled=bool(self._sharpen_on.get()),
             sharpen_ai_enabled=bool(self._sharpen_ai_on.get()),
             sharpen_ai_strength=float(self._sharpen_ai_strength.get()),
@@ -504,6 +530,13 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._upscale_on.select() if s.upscale_enabled else self._upscale_on.deselect()
         self._scale_var.set(f"{s.upscale_factor}x")
         self._model_var.set(s.upscale_model)
+        # Restore target size
+        if getattr(s, "upscale_max_long_side", 0) > 0:
+            self._upscale_target_on.select()
+            self._upscale_target_px.delete(0, "end")
+            self._upscale_target_px.insert(0, str(s.upscale_max_long_side))
+        else:
+            self._upscale_target_on.deselect()
         self._sharpen_on.select() if s.sharpen_enabled else self._sharpen_on.deselect()
         self._sharpen_person_only.select() if s.sharpen_person_only else self._sharpen_person_only.deselect()
         self._sharpen_amount.set(s.sharpen_amount)

@@ -30,6 +30,7 @@ class PipelineSettings:
     upscale_factor: int = 2                # 2 or 4
     upscale_model: str = "realesrgan-x4plus"   # model key
     upscale_tile: int = 0                  # 0 = auto
+    upscale_max_long_side: int = 0         # 0 = không giới hạn, > 0 = giới hạn cạnh dài (px)
 
     # --- Sharpen ---
     sharpen_enabled: bool = True
@@ -188,6 +189,18 @@ class Pipeline:
                     model_name=s.upscale_model,
                     tile=s.upscale_tile,
                 )
+                # Giới hạn cạnh dài sau upscale nếu được cấu hình
+                max_ls = getattr(s, "upscale_max_long_side", 0)
+                if max_ls > 0:
+                    h_r, w_r = result.shape[:2]
+                    long_side = max(h_r, w_r)
+                    if long_side > max_ls:
+                        ratio = max_ls / long_side
+                        new_w = int(w_r * ratio)
+                        new_h = int(h_r * ratio)
+                        _progress(f"Resize về {max_ls}px...")
+                        result = cv2.resize(result, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+                        logger.info(f"Upscale xong, resize: {w_r}x{h_r} → {new_w}x{new_h}")
             except Exception as e:
                 msg = f"Upscale thất bại: {e}"
                 logger.warning(msg)
