@@ -97,6 +97,9 @@ class PhotoProApp(ctk.CTk):
         self._build_center(body)
         self._build_right_panel(body)
         self._build_statusbar()
+        
+        # Load preset mặc định nếu có
+        self._load_preset("default")
 
     # ── Menu ─────────────────────────────────────────────────────────────
     def _build_menu(self):
@@ -123,6 +126,12 @@ class PhotoProApp(ctk.CTk):
                      activebackground="#2a4a7a")
         mb.add_cascade(label="Trợ giúp", menu=hm)
         hm.add_command(label=f"Phiên bản {self.VERSION}", state="disabled")
+        
+        pm = tk.Menu(mb, tearoff=0, bg="#10101f", fg="#c8d8f0",
+                     activebackground="#2a4a7a")
+        mb.add_cascade(label="Preset (Cài đặt)", menu=pm)
+        pm.add_command(label="Lưu làm Cài đặt Mặc định", command=lambda: self._save_preset("default"))
+        pm.add_command(label="Tải Cài đặt Mặc định", command=lambda: self._load_preset("default"))
 
         self.bind("<Control-o>", lambda e: self._open_file())
         self.bind("<Control-s>", lambda e: self._save_result())
