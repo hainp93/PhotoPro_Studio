@@ -96,7 +96,10 @@ class PhotoProApp(ctk.CTk):
         # Main layout: 3 columns
         self._main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self._main_frame.pack(fill="both", expand=True)
-        self._main_frame.columnconfigure(1, weight=1)  # center expands
+        # Column 0 = sidebar (fixed), col 1 = center (expands), col 2 = settings (fixed)
+        self._main_frame.columnconfigure(0, weight=0, minsize=170)
+        self._main_frame.columnconfigure(1, weight=1)
+        self._main_frame.columnconfigure(2, weight=0, minsize=320)
         self._main_frame.rowconfigure(0, weight=1)
 
         # Left sidebar
@@ -139,7 +142,7 @@ class PhotoProApp(ctk.CTk):
 
     def _build_sidebar(self):
         sidebar = ctk.CTkFrame(
-            self._main_frame, width=200,
+            self._main_frame, width=170,
             fg_color=BG_SIDEBAR, corner_radius=0,
             border_width=1, border_color=BORDER,
         )
@@ -147,13 +150,13 @@ class PhotoProApp(ctk.CTk):
         sidebar.grid_propagate(False)
 
         # Logo / title
-        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=72)
+        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=64)
         logo_frame.pack(fill="x")
         logo_frame.pack_propagate(False)
-        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 26)).pack(pady=(10, 0))
+        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 22)).pack(pady=(8, 0))
         ctk.CTkLabel(
             logo_frame, text="PhotoPro Studio",
-            font=("Inter Bold", 12, "bold"),
+            font=("Inter Bold", 11, "bold"),
             text_color=ACCENT_BLUE,
         ).pack()
 
@@ -306,7 +309,7 @@ class PhotoProApp(ctk.CTk):
 
     def _build_right_panel(self):
         right = ctk.CTkFrame(
-            self._main_frame, width=260,
+            self._main_frame, width=320,
             fg_color=BG_SETTINGS, corner_radius=0,
             border_width=1, border_color=BORDER,
         )
