@@ -1,5 +1,6 @@
 """
 PhotoPro Studio — Main Application Window
+Layout: Topbar + Center Viewer + Right Settings Panel
 """
 import customtkinter as ctk
 import tkinter as tk
@@ -9,7 +10,6 @@ import numpy as np
 import logging
 import os
 from pathlib import Path
-from dataclasses import asdict
 
 logger = logging.getLogger(__name__)
 
@@ -18,32 +18,33 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ─── Design tokens ──────────────────────────────────────────────────────────
-BG_APP        = "#0e0e1c"
-BG_SIDEBAR    = "#111128"
-BG_LOGO       = "#1a1b38"
-BG_CENTER     = "#0e0e1c"
-BG_SETTINGS   = "#0e0e1c"
-ACCENT_BLUE   = "#4f8ef7"
-ACCENT_CYAN   = "#3ecf8e"
-TEXT_PRIMARY  = "#dde6ff"
-TEXT_DIM      = "#5c7aaa"
-BORDER        = "#252545"
+BG_APP      = "#0b0b18"
+BG_TOPBAR   = "#10101f"
+BG_CENTER   = "#0b0b18"
+BG_SETTINGS = "#10101f"
+ACCENT      = "#4f8ef7"
+ACCENT_G    = "#3ecf8e"
+TEXT_HI     = "#eef2ff"
+TEXT_DIM    = "#4a6080"
+BORDER      = "#1e2040"
+
 
 class PhotoProApp(ctk.CTk):
     """
-    Main window với layout:
-    ┌──────────────┬──────────────────────────────┬──────────────┐
-    │              │                              │              │
-    │   Sidebar    │     Image Viewer (Center)    │   Settings   │
-    │  (controls)  │     Before / After Split     │   Panel      │
-    │              │                              │              │
-    └──────────────┴──────────────────────────────┴──────────────┘
-    │                    Status Bar                               │
-    └─────────────────────────────────────────────────────────────┘
+    Main window:
+    ┌────────────────────────────────────────────────────────────┐
+    │  Topbar: logo | Mở | Xử Lý | Lưu | Reset | Hủy | GPU    │
+    ├─────────────────────────────────────┬──────────────────────┤
+    │                                     │                      │
+    │       Image Viewer (center)         │   Settings Panel     │
+    │                                     │       (320px)        │
+    ├─────────────────────────────────────┴──────────────────────┤
+    │  Status  |  progress  |  image size  |  GPU info           │
+    └────────────────────────────────────────────────────────────┘
     """
 
     APP_NAME = "PhotoPro Studio"
-    VERSION = "1.0.0"
+    VERSION  = "1.0.0"
 
     def __init__(self):
         super().__init__()
@@ -59,7 +60,7 @@ class PhotoProApp(ctk.CTk):
         self._result_image: np.ndarray | None = None
         self._worker = None
         self._batch_worker = None
-        self._current_tab = "single"   # "single" | "batch"
+        self._current_tab = "single"
 
         self._setup_window()
         self._build_ui()
@@ -67,21 +68,13 @@ class PhotoProApp(ctk.CTk):
 
         logger.info(f"App started | {self._gpu.summary()}")
 
-    # ── Window Setup ─────────────────────────────────────────────────────
+    # ── Window ───────────────────────────────────────────────────────────
     def _setup_window(self):
         self.title(f"{self.APP_NAME} v{self.VERSION}")
-        w = self._cfg.config.window_width
-        h = self._cfg.config.window_height
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = (sw - w) // 2
-        y = (sh - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(1000, 650)
-        self.after(0, lambda: self.state("zoomed"))  # mặc định full màn hình
+        self.geometry("1400x900")
+        self.minsize(900, 600)
+        self.after(0, lambda: self.state("zoomed"))
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        # Icon nếu có
         icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
         if icon_path.exists():
             self.iconbitmap(str(icon_path))
@@ -91,216 +84,186 @@ class PhotoProApp(ctk.CTk):
 
     # ── UI Build ─────────────────────────────────────────────────────────
     def _build_ui(self):
-        # Top menubar
         self._build_menu()
+        self._build_topbar()
 
-        # Main layout: 3 columns
-        self._main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self._main_frame.pack(fill="both", expand=True)
-        # Column 0 = sidebar (fixed), col 1 = center (expands), col 2 = settings (fixed)
-        self._main_frame.columnconfigure(0, weight=0, minsize=170)
-        self._main_frame.columnconfigure(1, weight=1)
-        self._main_frame.columnconfigure(2, weight=0, minsize=320)
-        self._main_frame.rowconfigure(0, weight=1)
+        # Body: center (expands) + right panel (fixed 320px)
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True)
+        body.columnconfigure(0, weight=1)
+        body.columnconfigure(1, weight=0, minsize=320)
+        body.rowconfigure(0, weight=1)
 
-        # Left sidebar
-        self._build_sidebar()
-        # Center viewer
-        self._build_center()
-        # Right settings
-        self._build_right_panel()
-        # Bottom status bar
+        self._build_center(body)
+        self._build_right_panel(body)
         self._build_statusbar()
 
+    # ── Menu ─────────────────────────────────────────────────────────────
     def _build_menu(self):
-        menubar = tk.Menu(self, bg="#1a1a40", fg="#e0e8ff",
-                          activebackground="#2d5a8e", activeforeground="white",
-                          relief="flat", borderwidth=0)
-        self.configure(menu=menubar)
+        mb = tk.Menu(self, bg="#10101f", fg="#c8d8f0",
+                     activebackground="#2a4a7a", activeforeground="white",
+                     relief="flat", borderwidth=0)
+        self.configure(menu=mb)
 
-        file_menu = tk.Menu(menubar, tearoff=0, bg="#1a1a40", fg="#e0e8ff",
-                            activebackground="#2d5a8e")
-        menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Mở ảnh...          Ctrl+O", command=self._open_file)
-        file_menu.add_command(label="Lưu kết quả...     Ctrl+S", command=self._save_result)
-        file_menu.add_separator()
-        file_menu.add_command(label="Thoát              Alt+F4", command=self._on_close)
+        fm = tk.Menu(mb, tearoff=0, bg="#10101f", fg="#c8d8f0",
+                     activebackground="#2a4a7a")
+        mb.add_cascade(label="File", menu=fm)
+        fm.add_command(label="Mở ảnh...          Ctrl+O", command=self._open_file)
+        fm.add_command(label="Lưu kết quả...     Ctrl+S", command=self._save_result)
+        fm.add_separator()
+        fm.add_command(label="Thoát              Alt+F4", command=self._on_close)
 
-        tools_menu = tk.Menu(menubar, tearoff=0, bg="#1a1a40", fg="#e0e8ff",
-                             activebackground="#2d5a8e")
-        menubar.add_cascade(label="Công cụ", menu=tools_menu)
-        tools_menu.add_command(label="Giải phóng VRAM", command=self._unload_models)
-        tools_menu.add_command(label="GPU Info", command=self._show_gpu_info)
+        tm = tk.Menu(mb, tearoff=0, bg="#10101f", fg="#c8d8f0",
+                     activebackground="#2a4a7a")
+        mb.add_cascade(label="Công cụ", menu=tm)
+        tm.add_command(label="Giải phóng VRAM", command=self._unload_models)
+        tm.add_command(label="GPU Info",         command=self._show_gpu_info)
 
-        help_menu = tk.Menu(menubar, tearoff=0, bg="#1a1a40", fg="#e0e8ff",
-                            activebackground="#2d5a8e")
-        menubar.add_cascade(label="Trợ giúp", menu=help_menu)
-        help_menu.add_command(label=f"Phiên bản {self.VERSION}", state="disabled")
+        hm = tk.Menu(mb, tearoff=0, bg="#10101f", fg="#c8d8f0",
+                     activebackground="#2a4a7a")
+        mb.add_cascade(label="Trợ giúp", menu=hm)
+        hm.add_command(label=f"Phiên bản {self.VERSION}", state="disabled")
 
-        # Keyboard shortcuts
         self.bind("<Control-o>", lambda e: self._open_file())
         self.bind("<Control-s>", lambda e: self._save_result())
 
-    def _build_sidebar(self):
-        sidebar = ctk.CTkFrame(
-            self._main_frame, width=170,
-            fg_color=BG_SIDEBAR, corner_radius=0,
-            border_width=1, border_color=BORDER,
-        )
-        sidebar.grid(row=0, column=0, sticky="nsew")
-        sidebar.grid_propagate(False)
+    # ── Topbar ───────────────────────────────────────────────────────────
+    def _build_topbar(self):
+        bar = ctk.CTkFrame(self, height=52, fg_color=BG_TOPBAR,
+                           corner_radius=0, border_width=1, border_color=BORDER)
+        bar.pack(side="top", fill="x")
+        bar.pack_propagate(False)
 
-        # Logo / title
-        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=64)
-        logo_frame.pack(fill="x")
-        logo_frame.pack_propagate(False)
-        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 22)).pack(pady=(8, 0))
-        ctk.CTkLabel(
-            logo_frame, text="PhotoPro Studio",
-            font=("Inter Bold", 11, "bold"),
-            text_color=ACCENT_BLUE,
-        ).pack()
+        # Left group: logo + tab buttons
+        left = ctk.CTkFrame(bar, fg_color="transparent")
+        left.pack(side="left", padx=(10, 0), pady=6)
+
+        # Logo
+        ctk.CTkLabel(left, text="📸", font=("Segoe UI Emoji", 20)).pack(side="left")
+        ctk.CTkLabel(left, text="PhotoPro",
+                     font=("Inter", 13, "bold"), text_color=ACCENT).pack(side="left", padx=(4, 14))
+
+        # Separator
+        ctk.CTkFrame(left, width=1, height=28, fg_color=BORDER).pack(side="left", padx=4)
+
+        # Tab buttons: Đơn lẻ / Batch
+        tab_kw = {"height": 32, "corner_radius": 8, "font": ("Inter", 11, "bold"),
+                  "border_width": 0}
+        self._btn_single = ctk.CTkButton(
+            left, text="Đơn lẻ",
+            command=lambda: self._switch_tab("single"),
+            fg_color=ACCENT, hover_color="#3a7aed", text_color="white",
+            width=70, **tab_kw)
+        self._btn_single.pack(side="left", padx=(8, 2))
+
+        self._btn_batch = ctk.CTkButton(
+            left, text="Batch",
+            command=lambda: self._switch_tab("batch"),
+            fg_color="transparent", hover_color="#1a1a35", text_color=TEXT_DIM,
+            width=60, **tab_kw)
+        self._btn_batch.pack(side="left")
+
+        # Separator
+        ctk.CTkFrame(left, width=1, height=28, fg_color=BORDER).pack(side="left", padx=12)
+
+        # Action buttons
+        act_kw = {"height": 32, "corner_radius": 8, "font": ("Inter", 11, "bold"),
+                  "border_width": 0}
+
+        ctk.CTkButton(
+            left, text="📂  Mở Ảnh",
+            command=self._open_file,
+            fg_color="#1a1f3a", hover_color="#222845", text_color=TEXT_HI,
+            width=100, **act_kw,
+        ).pack(side="left", padx=(0, 4))
+
+        self._btn_process = ctk.CTkButton(
+            left, text="⚡  Xử Lý",
+            command=self._process_single,
+            fg_color=ACCENT, hover_color="#3a7aed", text_color="white",
+            width=90, state="disabled", **act_kw,
+        )
+        self._btn_process.pack(side="left", padx=(0, 4))
+
+        self._btn_save = ctk.CTkButton(
+            left, text="💾  Lưu",
+            command=self._save_result,
+            fg_color="#1a3020", hover_color="#223a28", text_color=ACCENT_G,
+            width=72, state="disabled", **act_kw,
+        )
+        self._btn_save.pack(side="left", padx=(0, 4))
+
+        ctk.CTkButton(
+            left, text="↺  Reset",
+            command=self._reset,
+            fg_color="#1e1010", hover_color="#2a1818", text_color="#c06060",
+            width=78, **act_kw,
+        ).pack(side="left", padx=(0, 4))
+
+        # Hủy button
+        self._btn_cancel = ctk.CTkButton(
+            left, text="■  Hủy",
+            command=self._cancel_process,
+            fg_color="#2a1010", hover_color="#3a1515", text_color="#f06060",
+            width=72, state="disabled", **act_kw,
+        )
+        self._btn_cancel.pack(side="left")
+
+        # Right group: progress + GPU info
+        right = ctk.CTkFrame(bar, fg_color="transparent")
+        right.pack(side="right", padx=12, pady=6)
 
         # GPU badge
         gpu_color = {
-            "high": ACCENT_CYAN, "mid": "#f5a623",
-            "low": "#f76f6f", "cpu": "#7a94c0",
-        }.get(self._gpu.gpu_tier, "#7a94c0")
-        gpu_text = (
-            self._gpu.device_name[:20] + "…"
-            if len(self._gpu.device_name) > 20
-            else self._gpu.device_name
-        )
-        gpu_frame = ctk.CTkFrame(sidebar, fg_color="#181830", corner_radius=6)
-        gpu_frame.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkLabel(
-            gpu_frame, text=f"🎮  {gpu_text}",
-            font=("Inter", 10), text_color=gpu_color,
-            wraplength=175, anchor="w",
-        ).pack(fill="x", padx=8, pady=4)
+            "high": ACCENT_G, "mid": "#f5a623",
+            "low": "#f76f6f", "cpu": "#5a7090",
+        }.get(self._gpu.gpu_tier, "#5a7090")
+        gpu_short = self._gpu.device_name
+        if not self._gpu.has_cuda:
+            gpu_short = "CPU Mode"
+        elif len(gpu_short) > 22:
+            gpu_short = gpu_short[:22] + "…"
 
-        # Tab buttons
-        tab_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        tab_frame.pack(fill="x", padx=8, pady=(8, 4))
+        gpu_badge = ctk.CTkFrame(right, fg_color="#0d1525", corner_radius=8)
+        gpu_badge.pack(side="right")
+        ctk.CTkLabel(gpu_badge, text=f"🎮 {gpu_short}",
+                     font=("Inter", 10), text_color=gpu_color).pack(padx=10, pady=5)
 
-        tab_style = {"height": 36, "corner_radius": 8, "font": ("Inter", 12, "bold")}
-        self._btn_single = ctk.CTkButton(
-            tab_frame, text="🖼  Đơn lẻ",
-            command=lambda: self._switch_tab("single"),
-            fg_color=ACCENT_BLUE, hover_color="#3a7aed",
-            text_color="white", **tab_style,
-        )
-        self._btn_single.pack(fill="x", pady=(0, 3))
-
-        self._btn_batch = ctk.CTkButton(
-            tab_frame, text="📦  Batch",
-            command=lambda: self._switch_tab("batch"),
-            fg_color="#1e1e3a", hover_color="#252550",
-            text_color=TEXT_DIM, **tab_style,
-        )
-        self._btn_batch.pack(fill="x")
-
-        # Action buttons (chỉ single mode)
-        self._sidebar_actions = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_actions.pack(fill="x", padx=8)
-
-        sep = ctk.CTkFrame(self._sidebar_actions, fg_color=BORDER, height=1)
-        sep.pack(fill="x", pady=6)
-
-        action_style = {"height": 38, "corner_radius": 8, "font": ("Inter", 12, "bold")}
-
-        ctk.CTkButton(
-            self._sidebar_actions, text="📂  Mở Ảnh",
-            command=self._open_file,
-            fg_color="#1e1e3a", hover_color="#2a2a55",
-            text_color=TEXT_PRIMARY, **action_style,
-        ).pack(fill="x", pady=(0, 3))
-
-        self._btn_process = ctk.CTkButton(
-            self._sidebar_actions, text="⚡  Xử Lý",
-            command=self._process_single,
-            fg_color=ACCENT_BLUE, hover_color="#3a7aed",
-            text_color="white", **action_style,
-            state="disabled",
-        )
-        self._btn_process.pack(fill="x", pady=(0, 3))
-
-        self._btn_save = ctk.CTkButton(
-            self._sidebar_actions, text="💾  Lưu Kết Quả",
-            command=self._save_result,
-            fg_color="#1f4d2a", hover_color="#2a6638",
-            text_color="#3ecf8e", **action_style,
-            state="disabled",
-        )
-        self._btn_save.pack(fill="x", pady=(0, 3))
-
-        ctk.CTkButton(
-            self._sidebar_actions, text="↺  Reset",
-            command=self._reset,
-            fg_color="#2a1a1a", hover_color="#3d2020",
-            text_color="#c07070", **action_style,
-        ).pack(fill="x")
-
-        # Progress
-        sep2 = ctk.CTkFrame(sidebar, fg_color=BORDER, height=1)
-        sep2.pack(fill="x", padx=8, pady=6)
-
-        self._sidebar_progress = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_progress.pack(fill="x", padx=8)
+        # Progress area (in topbar, compact)
+        prog_frame = ctk.CTkFrame(right, fg_color="transparent")
+        prog_frame.pack(side="right", padx=(0, 12))
 
         self._progress_bar = ctk.CTkProgressBar(
-            self._sidebar_progress, height=6,
-            progress_color=ACCENT_BLUE, fg_color="#1e1e3a",
-            corner_radius=3,
+            prog_frame, width=140, height=5,
+            progress_color=ACCENT, fg_color="#1a1f35", corner_radius=3,
         )
-        self._progress_bar.pack(fill="x", pady=(0, 3))
+        self._progress_bar.pack()
         self._progress_bar.set(0)
 
         self._lbl_step = ctk.CTkLabel(
-            self._sidebar_progress, text="",
-            font=("Inter", 10), text_color=TEXT_DIM,
-            wraplength=180,
+            prog_frame, text="",
+            font=("Inter", 9), text_color=TEXT_DIM, width=140,
         )
         self._lbl_step.pack()
 
-        self._btn_cancel = ctk.CTkButton(
-            sidebar, text="■  Hủy",
-            command=self._cancel_process,
-            fg_color="#3d1a1a", hover_color="#5a2020",
-            text_color="#f76f6f",
-            height=34, corner_radius=8, font=("Inter", 11, "bold"),
-            state="disabled",
-        )
-        self._btn_cancel.pack(fill="x", padx=8, pady=4)
+    # ── Center viewer ────────────────────────────────────────────────────
+    def _build_center(self, body):
+        center = ctk.CTkFrame(body, fg_color=BG_CENTER, corner_radius=0)
+        center.grid(row=0, column=0, sticky="nsew")
 
-        # Bottom: Preset manager
-        from ui.widgets.preset_manager import PresetManagerWidget
-        self._preset_mgr = PresetManagerWidget(
-            sidebar,
-            on_load=self._load_preset,
-            on_save=self._save_preset,
-        )
-        self._preset_mgr.pack(fill="x", padx=10, side="bottom", pady=10)
-
-    def _build_center(self):
-        center = ctk.CTkFrame(self._main_frame, fg_color=BG_CENTER, corner_radius=0)
-        center.grid(row=0, column=1, sticky="nsew")
-
-        # Drop zone hint
+        # Drop hint
         self._drop_hint = ctk.CTkLabel(
             center,
             text="📂\n\nKéo thả ảnh vào đây\nhoặc nhấn  Ctrl+O  để mở",
-            font=("Inter", 17), text_color="#2a3860",
+            font=("Inter", 18), text_color="#1c2540",
             justify="center",
         )
         self._drop_hint.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Image viewer
         from ui.widgets.image_viewer import ImageViewer
         self._viewer = ImageViewer(center)
         self._viewer.pack(fill="both", expand=True)
 
-        # Batch panel (hidden initially)
         from ui.panels.batch_panel import BatchPanel
         self._batch_panel = BatchPanel(
             center,
@@ -308,56 +271,50 @@ class PhotoProApp(ctk.CTk):
             on_cancel=self._cancel_batch,
         )
 
-    def _build_right_panel(self):
-        right = ctk.CTkFrame(
-            self._main_frame, width=320,
-            fg_color=BG_SETTINGS, corner_radius=0,
-            border_width=1, border_color=BORDER,
-        )
-        right.grid(row=0, column=2, sticky="nsew")
+    # ── Right settings panel ─────────────────────────────────────────────
+    def _build_right_panel(self, body):
+        right = ctk.CTkFrame(body, width=320, fg_color=BG_SETTINGS,
+                             corner_radius=0, border_width=1, border_color=BORDER)
+        right.grid(row=0, column=1, sticky="nsew")
         right.grid_propagate(False)
 
         from ui.panels.settings_panel import SettingsPanel
-        self._settings_panel = SettingsPanel(right, on_change=None)
+        self._settings_panel = SettingsPanel(
+            right, on_change=None, gpu=self._gpu
+        )
         self._settings_panel.pack(fill="both", expand=True)
 
+    # ── Statusbar ────────────────────────────────────────────────────────
     def _build_statusbar(self):
-        self._statusbar = ctk.CTkFrame(
-            self, height=30,
-            fg_color="#0a0a1e", corner_radius=0,
-            border_width=1, border_color=BORDER,
-        )
-        self._statusbar.pack(side="bottom", fill="x")
-        self._statusbar.pack_propagate(False)
+        bar = ctk.CTkFrame(self, height=26, fg_color="#080810",
+                           corner_radius=0, border_width=1, border_color=BORDER)
+        bar.pack(side="bottom", fill="x")
+        bar.pack_propagate(False)
 
         self._lbl_status = ctk.CTkLabel(
-            self._statusbar, text="Sẵn sàng",
+            bar, text="● Sẵn sàng",
             font=("Inter", 10), text_color=TEXT_DIM, anchor="w",
         )
         self._lbl_status.pack(side="left", padx=10)
 
-        gpu_summary = self._gpu.summary()
-        self._lbl_gpu = ctk.CTkLabel(
-            self._statusbar, text=gpu_summary,
-            font=("Inter", 9), text_color="#364560", anchor="e",
-        )
-        self._lbl_gpu.pack(side="right", padx=10)
+        gpu_sum = self._gpu.summary()
+        ctk.CTkLabel(bar, text=gpu_sum,
+                     font=("Inter", 9), text_color="#283040", anchor="e",
+                     ).pack(side="right", padx=10)
 
     # ── Tab Switching ─────────────────────────────────────────────────────
     def _switch_tab(self, tab: str):
         self._current_tab = tab
         if tab == "single":
-            self._btn_single.configure(fg_color=ACCENT_BLUE, text_color="white")
-            self._btn_batch.configure(fg_color="#1e1e3a", text_color=TEXT_DIM)
+            self._btn_single.configure(fg_color=ACCENT, text_color="white")
+            self._btn_batch.configure(fg_color="transparent", text_color=TEXT_DIM)
             self._batch_panel.pack_forget()
             self._viewer.pack(fill="both", expand=True)
-            self._sidebar_actions.pack(fill="x", padx=10)
         else:
-            self._btn_single.configure(fg_color="#1e1e3a", text_color=TEXT_DIM)
-            self._btn_batch.configure(fg_color=ACCENT_BLUE, text_color="white")
+            self._btn_single.configure(fg_color="transparent", text_color=TEXT_DIM)
+            self._btn_batch.configure(fg_color=ACCENT, text_color="white")
             self._viewer.pack_forget()
             self._batch_panel.pack(fill="both", expand=True)
-            self._sidebar_actions.pack_forget()
 
     # ── File Open / Save ──────────────────────────────────────────────────
     def _open_file(self):
@@ -375,7 +332,6 @@ class PhotoProApp(ctk.CTk):
         )
         if not path:
             return
-
         self._cfg.config.last_input_dir = str(Path(path).parent)
         self._load_image(path)
 
@@ -394,7 +350,7 @@ class PhotoProApp(ctk.CTk):
             self._btn_process.configure(state="normal")
             self._btn_save.configure(state="disabled")
             h, w = img.shape[:2]
-            self._set_status(f"✅ Đã mở: {Path(path).name} ({w}×{h}px)")
+            self._set_status(f"✅ Đã mở: {Path(path).name}  ({w}×{h}px)")
         except Exception as e:
             messagebox.showerror("Lỗi mở ảnh", str(e))
             self._set_status("❌ Lỗi mở ảnh")
@@ -403,24 +359,24 @@ class PhotoProApp(ctk.CTk):
         if self._result_image is None:
             messagebox.showwarning("Chưa có kết quả", "Hãy xử lý ảnh trước khi lưu.")
             return
-
         s = self._settings_panel.get_pipeline_settings()
         ext_map = {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp", "TIFF": ".tiff"}
         ext = ext_map.get(s.export_format, ".png")
-        init_name = (Path(self._input_path).stem + s.export_suffix + ext) if self._input_path else f"result{ext}"
-
+        init_name = (
+            Path(self._input_path).stem + s.export_suffix + ext
+            if self._input_path else f"result{ext}"
+        )
         path = filedialog.asksaveasfilename(
-            title="Lưu kết quả",
-            initialfile=init_name,
+            title="Lưu kết quả", initialfile=init_name,
             defaultextension=ext,
             filetypes=[(s.export_format, f"*{ext}"), ("Tất cả", "*.*")],
         )
         if not path:
             return
-
         from utils.image_io import save_image
         try:
-            save_image(self._result_image, path, fmt=s.export_format, quality=s.export_quality)
+            save_image(self._result_image, path,
+                       fmt=s.export_format, quality=s.export_quality)
             self._set_status(f"✅ Đã lưu: {Path(path).name}")
         except Exception as e:
             messagebox.showerror("Lỗi lưu ảnh", str(e))
@@ -429,18 +385,15 @@ class PhotoProApp(ctk.CTk):
     def _process_single(self):
         if self._original_image is None:
             return
-
         s = self._settings_panel.get_pipeline_settings()
         from core.pipeline import get_pipeline
         from core.worker import ProcessingWorker
-
-        pipeline = get_pipeline()
 
         self._set_processing_state(True)
         self._set_status("⚡ Đang xử lý...")
 
         self._worker = ProcessingWorker(
-            fn=pipeline.process,
+            fn=get_pipeline().process,
             args=(self._original_image,),
             kwargs={"settings": s},
             on_progress=self._on_progress,
@@ -467,13 +420,12 @@ class PhotoProApp(ctk.CTk):
         self._btn_save.configure(state="normal")
         h, w = self._result_image.shape[:2]
         self._progress_bar.set(1.0)
-        # Kiểm tra nếu có cảnh báo từ pipeline
         lbl = self._lbl_step.cget("text")
         if "cảnh báo" in lbl.lower():
             self._set_status(f"⚠ Xong (một số bước bị bỏ qua) | {w}×{h}px")
         else:
-            self._set_status(f"✅ Xử lý xong! Kết quả: {w}×{h}px")
             self._lbl_step.configure(text="Hoàn thành!")
+            self._set_status(f"✅ Xử lý xong! Kết quả: {w}×{h}px")
 
     def _on_process_error(self, msg: str):
         self.after(0, lambda: self._handle_error(msg))
@@ -490,13 +442,12 @@ class PhotoProApp(ctk.CTk):
         self._set_status("⚪ Đã hủy")
 
     def _set_processing_state(self, processing: bool):
-        state = "disabled" if processing else "normal"
-        self._btn_process.configure(state=state)
+        self._btn_process.configure(state="disabled" if processing else "normal")
         self._btn_cancel.configure(state="normal" if processing else "disabled")
 
-    # ── Batch Processing ──────────────────────────────────────────────────
+    # ── Batch ─────────────────────────────────────────────────────────────
     def _run_batch(self, files: list[str], out_dir: str | None):
-        from core.pipeline import get_pipeline, PipelineSettings
+        from core.pipeline import get_pipeline
         from core.worker import BatchWorker
         from utils.image_io import read_image, save_image, build_output_path
 
@@ -514,7 +465,9 @@ class PhotoProApp(ctk.CTk):
         self._batch_worker = BatchWorker(
             items=files,
             process_fn=process_one,
-            on_progress=lambda pct, msg: self.after(0, lambda: self._batch_panel.update_progress(pct, msg)),
+            on_progress=lambda pct, msg: self.after(
+                0, lambda: self._batch_panel.update_progress(pct, msg)
+            ),
             on_all_done=lambda results: self.after(0, self._batch_panel.on_batch_done),
         )
         self._batch_worker.start()
@@ -523,7 +476,7 @@ class PhotoProApp(ctk.CTk):
         if self._batch_worker:
             self._batch_worker.cancel()
 
-    # ── Utilities ─────────────────────────────────────────────────────────
+    # ── Utilities ──────────────────────────────────────────────────────────
     def _reset(self):
         self._result_image = None
         if self._original_image is not None:
@@ -533,12 +486,21 @@ class PhotoProApp(ctk.CTk):
         self._btn_save.configure(state="disabled")
         self._set_status("↺ Đã reset")
 
+    def _unload_models(self):
+        from core.pipeline import get_pipeline
+        get_pipeline().unload_models()
+        self._set_status("🗑 Đã giải phóng VRAM")
+
+    def _show_gpu_info(self):
+        messagebox.showinfo("GPU Info", self._gpu.summary())
+
     def _load_preset(self, name: str):
         from utils.config import get_config
-        from core.pipeline import PipelineSettings
         data = get_config().load_preset(name)
         if data:
-            s = PipelineSettings(**{k: v for k, v in data.items() if hasattr(PipelineSettings, k)})
+            from core.pipeline import PipelineSettings
+            s = PipelineSettings(**{k: v for k, v in data.items()
+                                    if hasattr(PipelineSettings, k)})
             self._settings_panel.apply_settings(s)
             self._set_status(f"✅ Đã load preset: {name}")
 
@@ -549,19 +511,9 @@ class PhotoProApp(ctk.CTk):
         get_config().save_preset(name, asdict(s))
         self._set_status(f"✅ Đã lưu preset: {name}")
 
-    def _unload_models(self):
-        from core.pipeline import get_pipeline
-        get_pipeline().unload_models()
-        self._set_status("🗑 Đã giải phóng VRAM")
-
-    def _show_gpu_info(self):
-        messagebox.showinfo("GPU Info", self._gpu.summary())
-
     def _set_status(self, text: str):
         self._lbl_status.configure(text=text)
 
     def _on_close(self):
-        self._cfg.config.window_width = self.winfo_width()
-        self._cfg.config.window_height = self.winfo_height()
         self._cfg.save()
         self.destroy()

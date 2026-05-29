@@ -130,16 +130,17 @@ class SettingsPanel(ctk.CTkScrollableFrame):
     Thiết kế card hiện đại với accent color per-section.
     """
 
-    def __init__(self, master, on_change=None, **kwargs):
+    def __init__(self, master, on_change=None, gpu=None, **kwargs):
         super().__init__(
             master,
-            fg_color="#0e0e1c",
+            fg_color="#0b0b18",
             corner_radius=0,
-            scrollbar_button_color="#252545",
-            scrollbar_button_hover_color="#353560",
+            scrollbar_button_color="#1e2040",
+            scrollbar_button_hover_color="#2a2a55",
             **kwargs,
         )
         self._on_change = on_change or (lambda: None)
+        self._gpu = gpu  # GPUInfo hoặc None
         self._build_ui()
 
     def _build_ui(self):
@@ -194,7 +195,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             button_color=ACCENT_UPSCALE, button_hover_color=ACCENT_UPSCALE,
             progress_color=ACCENT_UPSCALE,
         )
-        # Mặc định TẮt — cần cài basicsr+realesrgan mới dùng được
+        # Tự bật nếu có GPU đủ mạnh (high/mid tier với CUDA)
+        gpu_has_power = (
+            self._gpu is not None
+            and self._gpu.has_cuda
+            and self._gpu.gpu_tier in ("high", "mid")
+        )
+        if gpu_has_power:
+            self._upscale_on.select()
         self._upscale_on.pack(anchor="w", pady=(2, 4))
 
         # Scale factor
