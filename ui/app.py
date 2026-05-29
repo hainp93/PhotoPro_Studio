@@ -177,6 +177,15 @@ class PhotoProApp(ctk.CTk):
             width=100, **act_kw,
         ).pack(side="left", padx=(0, 6))
 
+        self._btn_scan = ctk.CTkButton(
+            left, text="🔍 Quét Mặt",
+            command=self._scan_faces,
+            fg_color="transparent", hover_color="#1a2e3a", text_color="#4f8ef7",
+            border_width=1, border_color=BORDER,
+            width=95, state="disabled", **act_kw,
+        )
+        self._btn_scan.pack(side="left", padx=(0, 6))
+
         self._btn_process = ctk.CTkButton(
             left, text="⚡  Xử Lý",
             command=self._process_single,
@@ -351,6 +360,7 @@ class PhotoProApp(ctk.CTk):
             self._viewer.set_after(None)
             self._viewer.fit_to_window()
             self._drop_hint.place_forget()
+            self._btn_scan.configure(state="normal")
             self._btn_process.configure(state="normal")
             self._btn_save.configure(state="disabled")
             h, w = img.shape[:2]
@@ -385,6 +395,38 @@ class PhotoProApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Lỗi lưu ảnh", str(e))
 
+    # ── Interactive Scan ──────────────────────────────────────────────────
+    def _scan_faces(self):
+        if self._original_image is None: return
+        self._set_processing_state(True)
+        self._update_progress(0, "Đang khởi tạo AI dò khuôn mặt...")
+        
+        def _worker():
+            try:
+                from processors.face_restorer import FaceRestorer
+                restorer = FaceRestorer()
+                s = self._settings_panel.get_pipeline_settings()
+                
+                restorer.setup_image(self._original_image, upsample=s.face_restore_upsample, bg_upscale=False)
+                bboxes = restorer.detect_faces(high_res=s.face_restore_high_res)
+                
+                # Hàm callback khi user vẽ box
+                def _on_manual_box(bbox):
+                    return restorer.add_manual_face(bbox)
+                    
+                self.after(0, lambda: self._on_scan_done(bboxes, _on_manual_box))
+            except Exception as e:
+                self.after(0, lambda err=e: self._handle_error(f"Lỗi quét mặt: {err}"))
+                
+        # Dùng the same ThreadPoolExecutor từ Pipeline hoặc tạo mới thread
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_scan_done(self, bboxes, callback):
+        self._set_processing_state(False)
+        self._viewer.set_face_interactive_mode(True, ai_bboxes=bboxes, callback=callback)
+        self._update_progress(100.0, f"Đã tìm thấy {len(bboxes)} khuôn mặt. Kéo chuột để vẽ thêm nếu thiếu.")
+
     # ── Single Processing ─────────────────────────────────────────────────
     def _process_single(self):
         if self._original_image is None:
@@ -399,7 +441,10 @@ class PhotoProApp(ctk.CTk):
         self._worker = ProcessingWorker(
             fn=get_pipeline().process,
             args=(self._original_image,),
-            kwargs={"settings": s},
+            kwargs={
+                "settings": s,
+                "manual_bboxes": self._viewer._manual_bboxes,
+            },
             on_progress=self._on_progress,
             on_done=self._on_process_done,
             on_error=self._on_process_error,

@@ -35,12 +35,13 @@ class SectionFrame(ctk.CTkFrame):
         self._accent = accent
 
         # Header bar
-        hdr = ctk.CTkFrame(self, fg_color=HEADER_BG, corner_radius=6)
+        hdr = ctk.CTkFrame(self, fg_color=HEADER_BG, corner_radius=6, height=30)
         hdr.pack(fill="x", padx=2, pady=(2, 0))
+        hdr.pack_propagate(False)
 
         # Accent line bên trái
         accent_bar = ctk.CTkFrame(hdr, fg_color=accent, width=3, corner_radius=2)
-        accent_bar.pack(side="left", fill="y", padx=(5, 0), pady=5)
+        accent_bar.pack(side="left", fill="y", padx=(5, 0), pady=4)
 
         # Icon + Title
         ctk.CTkLabel(
@@ -48,7 +49,7 @@ class SectionFrame(ctk.CTkFrame):
             font=("Inter", 11),
             text_color=accent,
             anchor="w",
-        ).pack(side="left", padx=6, pady=5, fill="x", expand=True)
+        ).pack(side="left", padx=6, fill="x", expand=True)
 
         # Toggle indicator
         self._indicator = ctk.CTkLabel(

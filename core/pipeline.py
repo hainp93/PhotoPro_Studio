@@ -89,10 +89,12 @@ class Pipeline:
         settings: PipelineSettings = None,
         progress_cb: Callable[[float, str], None] = None,
         cancel_flag: threading.Event = None,
+        manual_bboxes: list = None,
     ) -> np.ndarray:
         """
         Xử lý ảnh qua toàn bộ pipeline.
         image: numpy array BGR uint8
+        manual_bboxes: list of (x, y, w, h) to force face restoration
         Trả về: numpy array BGR uint8
         """
         s = settings or self._settings
@@ -202,13 +204,23 @@ class Pipeline:
             logger.debug(f"Pipeline: Face Restore model={s.face_restore_model}")
             try:
                 proc = self._get_processor("face_restorer")
-                result = proc.process(
-                    result,
-                    fidelity=s.face_restore_fidelity,
-                    model_name=s.face_restore_model,
-                    upsample=s.face_restore_upsample,
-                    high_res=s.face_restore_high_res,
+                proc.setup_image(
+                    result, 
+                    upsample=s.face_restore_upsample, 
+                    bg_upscale=False
                 )
+                
+                # Quét AI
+                proc.detect_faces(high_res=s.face_restore_high_res)
+                
+                # Cắt và lấy landmarks cho các mặt thủ công
+                if manual_bboxes:
+                    _progress("Đang xử lý khuôn mặt thủ công...")
+                    for bbox in manual_bboxes:
+                        proc.add_manual_face(bbox)
+                
+                result = proc.restore_faces(fidelity=s.face_restore_fidelity)
+                proc.unload()
             except Exception as e:
                 msg = f"Face Restore thất bại: {e}"
                 logger.warning(msg)

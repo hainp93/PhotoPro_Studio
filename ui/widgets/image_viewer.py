@@ -41,6 +41,14 @@ class ImageViewer(ctk.CTkFrame):
         self._dragging_split = False
         self._split_mode = True   # True = split view, False = single view
 
+        # Face Detection Interactive Mode
+        self._interactive_face_mode = False
+        self._ai_bboxes = []       # [(x1, y1, x2, y2), ...]
+        self._manual_bboxes = []   # [(x1, y1, x2, y2), ...]
+        self._drawing_box_start = None  # (canvas_x, canvas_y)
+        self._temp_box_id = None
+        self._on_manual_box_cb = None
+
         # Canvas
         self._canvas = tk.Canvas(
             self,
@@ -128,6 +136,8 @@ class ImageViewer(ctk.CTkFrame):
     def set_after(self, image: np.ndarray | None):
         self._after_img = image
         if image is not None:
+            # Tắt chế độ vẽ box khi có ảnh after
+            self._interactive_face_mode = False
             # Chuyển sang Split mode để so sánh trước/sau
             self._split_mode = True
             self._split_pos = 0.5
@@ -139,6 +149,23 @@ class ImageViewer(ctk.CTkFrame):
         else:
             self._split_mode = True
             self._btn_split.configure(text="Split ▧", fg_color="#23355a", text_color="#7ab3f7")
+        self._redraw()
+
+    def set_face_interactive_mode(self, active: bool, ai_bboxes: list = None, callback=None):
+        """Bật/tắt chế độ cho phép vẽ box khuôn mặt."""
+        self._interactive_face_mode = active
+        if active:
+            # Force single view on before_img
+            self._split_mode = False
+            self._ai_bboxes = ai_bboxes or []
+            self._manual_bboxes = []
+            self._on_manual_box_cb = callback
+            self._canvas.configure(cursor="crosshair")
+        else:
+            self._ai_bboxes = []
+            self._manual_bboxes = []
+            self._on_manual_box_cb = None
+            self._canvas.configure(cursor="crosshair")
         self._redraw()
 
     def clear(self):
@@ -263,6 +290,23 @@ class ImageViewer(ctk.CTkFrame):
         self._after_tk = ImageTk.PhotoImage(pil)
         self._canvas.create_image(x, y, anchor="nw", image=self._after_tk)
         self._lbl_info.configure(text=f"{img.shape[1]}×{img.shape[0]}px")
+        
+        if self._interactive_face_mode:
+            # Vẽ bbox
+            for bbox in self._ai_bboxes:
+                x1, y1, x2, y2 = bbox
+                cx1, cy1 = self._img_to_canvas(x1, y1)
+                cx2, cy2 = self._img_to_canvas(x2, y2)
+                # Chỉ vẽ nếu nằm trong vùng nhìn thấy
+                if cx2 > 0 and cy2 > 0 and cx1 < cw and cy1 < ch:
+                    self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#4f8ef7", width=2)
+                    
+            for bbox in self._manual_bboxes:
+                x1, y1, x2, y2 = bbox
+                cx1, cy1 = self._img_to_canvas(x1, y1)
+                cx2, cy2 = self._img_to_canvas(x2, y2)
+                if cx2 > 0 and cy2 > 0 and cx1 < cw and cy1 < ch:
+                    self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00e676", width=2, dash=(4, 2))
 
 
     def _draw_split(self, cw: int, ch: int):
@@ -298,6 +342,31 @@ class ImageViewer(ctk.CTkFrame):
         self._lbl_info.configure(text=f"{w}×{h}px")
 
     # ── Events ────────────────────────────────────────────────────────
+    def _img_to_canvas(self, x, y):
+        """Map tọa độ ảnh gốc sang Canvas."""
+        cw = self._canvas.winfo_width() or 800
+        ch = self._canvas.winfo_height() or 600
+        if self._before_img is None: return 0, 0
+        ih, iw = self._before_img.shape[:2]
+        
+        # Center of the image in canvas coordinates
+        cx = cw / 2 + self._pan_x
+        cy = ch / 2 + self._pan_y
+        
+        return cx + (x - iw / 2) * self._zoom, cy + (y - ih / 2) * self._zoom
+
+    def _canvas_to_img(self, cx, cy):
+        """Map tọa độ Canvas sang ảnh gốc."""
+        cw = self._canvas.winfo_width() or 800
+        ch = self._canvas.winfo_height() or 600
+        if self._before_img is None: return 0, 0
+        ih, iw = self._before_img.shape[:2]
+        
+        center_x = cw / 2 + self._pan_x
+        center_y = ch / 2 + self._pan_y
+        
+        return (cx - center_x) / self._zoom + iw / 2, (cy - center_y) / self._zoom + ih / 2
+
     def _on_scroll(self, event):
         if event.num == 4 or event.delta > 0:
             self._zoom = min(self._zoom * 1.15, self._max_zoom)
@@ -306,6 +375,11 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_press(self, event):
+        if self._interactive_face_mode:
+            # Vẽ hình chữ nhật mới
+            self._drawing_box_start = (event.x, event.y)
+            return
+
         # Check nếu click gần divider — vùng bắt rộng 20px
         cw = self._canvas.winfo_width()
         split_x = int(cw * self._split_pos)
@@ -316,6 +390,15 @@ class ImageViewer(ctk.CTkFrame):
             self._dragging_split = False
 
     def _on_drag(self, event):
+        if self._interactive_face_mode and self._drawing_box_start:
+            if self._temp_box_id:
+                self._canvas.delete(self._temp_box_id)
+            sx, sy = self._drawing_box_start
+            self._temp_box_id = self._canvas.create_rectangle(
+                sx, sy, event.x, event.y, outline="#00e676", width=2, dash=(4, 2)
+            )
+            return
+
         if self._dragging_split:
             cw = self._canvas.winfo_width()
             self._split_pos = max(0.05, min(0.95, event.x / cw))
@@ -326,6 +409,30 @@ class ImageViewer(ctk.CTkFrame):
             self._redraw()
 
     def _on_release(self, event):
+        if self._interactive_face_mode and self._drawing_box_start:
+            if self._temp_box_id:
+                self._canvas.delete(self._temp_box_id)
+                self._temp_box_id = None
+            
+            sx, sy = self._drawing_box_start
+            ex, ey = event.x, event.y
+            
+            # Nếu khung quá bé thì bỏ qua (chống click nhầm)
+            if abs(ex - sx) > 20 and abs(ey - sy) > 20:
+                ix1, iy1 = self._canvas_to_img(min(sx, ex), min(sy, ey))
+                ix2, iy2 = self._canvas_to_img(max(sx, ex), max(sy, ey))
+                bbox = [ix1, iy1, ix2, iy2]
+                
+                # Gọi callback, nếu callback trả về True (thành công) thì lưu lại để vẽ
+                if self._on_manual_box_cb:
+                    success = self._on_manual_box_cb(bbox)
+                    if success:
+                        self._manual_bboxes.append(bbox)
+                        self._redraw()
+            
+            self._drawing_box_start = None
+            return
+
         self._drag_start = None
         self._dragging_split = False
 
@@ -333,6 +440,10 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_mouse_move(self, event):
+        if self._interactive_face_mode:
+            self._canvas.configure(cursor="crosshair")
+            return
+            
         cw = self._canvas.winfo_width()
         split_x = int(cw * self._split_pos)
         if self._split_mode and abs(event.x - split_x) < 20:

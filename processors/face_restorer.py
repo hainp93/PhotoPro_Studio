@@ -165,56 +165,103 @@ class FaceRestorer:
 
         return helper
 
-    def process(
-        self,
-        image: np.ndarray,
-        fidelity: float = 0.5,
-        model_name: str = "codeformer",
-        upsample: bool = True,
-        bg_upscale: bool = True,
-        high_res: bool = True,
-    ) -> np.ndarray:
-        """
-        image    : BGR uint8
-        fidelity : 0.0 = AI hoàn toàn | 1.0 = giữ nguyên gốc
-        upsample : upscale khuôn mặt 2x sau khi restore
-        bg_upscale: dùng RealESRGAN để upscale background
-        high_res : quét toàn bộ ảnh để dò tìm mặt (tốn VRAM nhưng bắt được mặt nhỏ)
-        """
-        from torchvision.transforms.functional import normalize as norm_fn
-        from basicsr.utils import img2tensor, tensor2img
-
+    def setup_image(self, image: np.ndarray, upsample: bool = True, bg_upscale: bool = True):
+        """Khởi tạo FaceRestoreHelper và load ảnh gốc."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         if not self._loaded:
             self._load(use_bg_upscale=bg_upscale)
+            
+        self._current_image = image
+        self._current_upsample = upsample
+        self._current_bg_upscale = bg_upscale
+        
+        self.face_helper = self._get_face_helper(upscale=2 if upsample else 1, device=device)
+        self.face_helper.clean_all()
+        self.face_helper.read_image(image)
 
-        face_helper = self._get_face_helper(upscale=2 if upsample else 1, device=device)
-        face_helper.clean_all()
-        face_helper.read_image(image)
-
-        # Nếu high_res = True, không resize ảnh khi detect và hạ threshold khoảng cách mắt
+    def detect_faces(self, high_res: bool = True) -> list:
+        """Quét ảnh và trả về danh sách bounding boxes của AI [x1, y1, x2, y2]."""
         resize_dim = None if high_res else 640
         eye_dist = 3 if high_res else 5
-
-        num_faces = face_helper.get_face_landmarks_5(
+        
+        self.face_helper.get_face_landmarks_5(
             only_center_face=False, resize=resize_dim, eye_dist_threshold=eye_dist
         )
-        logger.info(f"FaceRestorer: phát hiện {num_faces} khuôn mặt (high_res={high_res})")
+        logger.info(f"AI phát hiện {len(self.face_helper.det_faces)} khuôn mặt (high_res={high_res})")
+        
+        bboxes = []
+        for face in self.face_helper.det_faces:
+            bboxes.append(face[:4].tolist()) # [x1, y1, x2, y2]
+        return bboxes
 
+    def add_manual_face(self, bbox: list) -> bool:
+        """
+        Xử lý khung thủ công do người dùng vẽ:
+        Cắt vùng ảnh đó ra, chạy lại RetinaFace cục bộ để tìm 5 điểm neo (landmarks).
+        Nếu tìm thấy, cộng dồn tọa độ gốc và lưu vào face_helper.
+        bbox: [x1, y1, x2, y2]
+        """
+        x1, y1, x2, y2 = map(int, bbox)
+        # Nới rộng bbox một chút để RetinaFace dễ bắt
+        ih, iw = self._current_image.shape[:2]
+        w, h = x2 - x1, y2 - y1
+        px, py = int(w * 0.2), int(h * 0.2)
+        
+        cx1 = max(0, x1 - px)
+        cy1 = max(0, y1 - py)
+        cx2 = min(iw, x2 + px)
+        cy2 = min(ih, y2 + py)
+        
+        crop = self._current_image[cy1:cy2, cx1:cx2]
+        
+        # Chạy detect trên ảnh crop (Dùng một helper tạm thời)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        temp_helper = self._get_face_helper(upscale=1, device=device)
+        temp_helper.clean_all()
+        temp_helper.read_image(crop)
+        
+        num = temp_helper.get_face_landmarks_5(only_center_face=True, resize=None)
+        if num == 0:
+            logger.warning("Không tìm thấy 5 điểm neo (landmarks) trong khung thủ công.")
+            return False
+            
+        # Ánh xạ tọa độ từ crop về ảnh gốc
+        local_det = temp_helper.det_faces[0]
+        local_det[0] += cx1; local_det[1] += cy1
+        local_det[2] += cx1; local_det[3] += cy1
+        
+        local_lmk = temp_helper.all_landmarks_5[0]
+        local_lmk[:, 0] += cx1
+        local_lmk[:, 1] += cy1
+        
+        # Thêm vào helper chính
+        self.face_helper.det_faces.append(local_det)
+        self.face_helper.all_landmarks_5.append(local_lmk)
+        logger.info(f"Đã thêm khuôn mặt thủ công tại {x1},{y1}-{x2},{y2}")
+        return True
+
+    def restore_faces(self, fidelity: float = 0.5) -> np.ndarray:
+        """
+        Tiến hành align, restore và paste các khuôn mặt (cả AI và thủ công)
+        """
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        num_faces = len(self.face_helper.det_faces)
+        
         if num_faces == 0:
             logger.info("Không có mặt → bỏ qua face restore")
-            if self._bg_upsampler and bg_upscale:
-                # Chỉ upscale background nếu không có mặt
-                rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            if self._bg_upsampler and self._current_bg_upscale:
+                rgb = cv2.cvtColor(self._current_image, cv2.COLOR_BGR2RGB)
                 bg, _ = self._bg_upsampler.enhance(rgb, outscale=2)
                 return cv2.cvtColor(bg, cv2.COLOR_RGB2BGR)
-            return image
+            return self._current_image
 
-        face_helper.align_warp_face()
+        self.face_helper.align_warp_face()
 
         # ── Restore mỗi khuôn mặt ────────────────────────────────────
-        for cropped_face in face_helper.cropped_faces:
+        for cropped_face in self.face_helper.cropped_faces:
+            from torchvision.transforms.functional import normalize as norm_fn
+            from basicsr.utils import img2tensor, tensor2img
+            
             face_t = img2tensor(cropped_face / 255.0, bgr2rgb=True, float32=True)
             norm_fn(face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
             face_t = face_t.unsqueeze(0).to(device)
@@ -232,34 +279,35 @@ class FaceRestorer:
                 logger.error(f"CodeFormer inference lỗi: {e}")
                 restored = tensor2img(face_t.float(), rgb2bgr=True, min_max=(-1, 1))
 
-            face_helper.add_restored_face(restored.astype("uint8"), cropped_face)
+            self.face_helper.add_restored_face(restored.astype("uint8"), cropped_face)
 
         # ── Upscale background + paste faces ─────────────────────────
-        face_helper.get_inverse_affine(None)
+        self.face_helper.get_inverse_affine(None)
 
-        if self._bg_upsampler and bg_upscale:
+        if self._bg_upsampler and self._current_bg_upscale:
             logger.info("RealESRGAN: upscaling background 2x...")
-            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            rgb = cv2.cvtColor(self._current_image, cv2.COLOR_BGR2RGB)
             bg_rgb, _ = self._bg_upsampler.enhance(rgb, outscale=2)
             bg_img = cv2.cvtColor(bg_rgb, cv2.COLOR_RGB2BGR)
         else:
             bg_img = None
 
         # Paste restored faces vào background
-        if upsample and self._bg_upsampler:
-            result = face_helper.paste_faces_to_input_image(
+        if self._current_upsample and self._bg_upsampler:
+            result = self.face_helper.paste_faces_to_input_image(
                 upsample_img=bg_img,
                 draw_box=False,
                 face_upsampler=self._bg_upsampler,
             )
         else:
-            result = face_helper.paste_faces_to_input_image(
+            result = self.face_helper.paste_faces_to_input_image(
                 upsample_img=bg_img,
                 draw_box=False,
             )
 
         logger.info("✅ Face restore hoàn thành")
         return result
+
 
     def unload(self):
         self._net = None
