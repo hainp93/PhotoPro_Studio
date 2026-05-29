@@ -105,10 +105,16 @@ def patch_codeformer_basicsr():
         return  # CodeFormer_repo chưa clone
     ver_file = cf_basicsr / "version.py"
     if not ver_file.exists():
-        ver_file.write_text("__version__ = '1.4.2-codeformer'\n")
+        ver_file.write_text("__version__ = '1.4.2-codeformer'\n__gitsha__ = 'unknown'\n")
         print(f"  [PATCH] Created {ver_file}")
     else:
-        print(f"  [SKIP]  basicsr/version.py already exists")
+        # Kiểm tra xem có __gitsha__ chưa, nếu chưa thì append
+        content = ver_file.read_text()
+        if "__gitsha__" not in content:
+            ver_file.write_text(content + "\n__gitsha__ = 'unknown'\n")
+            print(f"  [PATCH] Added __gitsha__ to {ver_file}")
+        else:
+            print(f"  [SKIP]  basicsr/version.py already exists")
 
 
 def setup_all():
