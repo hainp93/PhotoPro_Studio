@@ -33,6 +33,7 @@ class PipelineSettings:
     sharpen_amount: float = 1.0            # 0.0–2.0 (LAB bilateral hiệu quả hơn)
     sharpen_radius: float = 1.0            # pixels
     sharpen_threshold: int = 3             # 0–10
+    sharpen_person_only: bool = True       # Chỉ làm nét cơ thể người bằng AI mask
 
     # --- Face Restore ---
     face_restore_enabled: bool = True      # Bật mặc định để cứu nét
@@ -81,6 +82,9 @@ class Pipeline:
             elif name == "face_restorer":
                 from processors.face_restorer import FaceRestorer
                 self._processors[name] = FaceRestorer()
+            elif name == "person_segmenter":
+                from processors.person_segmenter import PersonSegmenter
+                self._processors[name] = PersonSegmenter()
         return self._processors[name]
 
     def process(
@@ -155,12 +159,14 @@ class Pipeline:
         # ── Step 3: Sharpen ──────────────────────────────────────────
         if s.sharpen_enabled and not cancel_flag.is_set():
             proc = self._get_processor("sharpener")
+            sharpened_result = result.copy()
+            
             if s.sharpen_ai_enabled:
                 _progress("Đang làm nét AI (Real-ESRGAN)...")
                 logger.debug(f"Pipeline: AI Sharpen model={s.sharpen_ai_model}")
                 try:
-                    result = proc.process_ai(
-                        result,
+                    sharpened_result = proc.process_ai(
+                        sharpened_result,
                         model_name=s.sharpen_ai_model,
                         tile=s.upscale_tile,
                         strength=s.sharpen_ai_strength,
@@ -169,8 +175,8 @@ class Pipeline:
                     logger.warning(f"AI Sharpen thất bại, fallback classical: {e}")
                     warnings.append(f"AI Sharpen fallback: {e}")
                     try:
-                        result = proc.process(
-                            result,
+                        sharpened_result = proc.process(
+                            sharpened_result,
                             amount=s.sharpen_amount,
                             radius=s.sharpen_radius,
                             threshold=s.sharpen_threshold,
@@ -182,21 +188,41 @@ class Pipeline:
                 logger.debug(f"Pipeline: {s.sharpen_method} Sharpen")
                 try:
                     if s.sharpen_method == "USM":
-                        result = proc.process_usm(
-                            result,
+                        sharpened_result = proc.process_usm(
+                            sharpened_result,
                             amount=s.sharpen_amount,
                             radius=s.sharpen_radius,
                             threshold=s.sharpen_threshold,
                         )
                     else:  # Bilateral (default)
-                        result = proc.process(
-                            result,
+                        sharpened_result = proc.process(
+                            sharpened_result,
                             amount=s.sharpen_amount,
                             radius=s.sharpen_radius,
                             threshold=s.sharpen_threshold,
                         )
                 except Exception as e:
                     warnings.append(f"Làm nét thất bại: {e}")
+            
+            # Blend dựa trên Person Mask
+            if s.sharpen_person_only:
+                _progress("Đang bóc tách cơ thể (AI Person Mask)...")
+                logger.debug("Pipeline: Áp dụng Person Masking cho Sharpening")
+                try:
+                    seg_proc = self._get_processor("person_segmenter")
+                    # Lấy mask (numpy float32, từ 0 đến 1)
+                    mask = seg_proc.get_person_mask(result, feather_amount=21)
+                    # Mở rộng mask thành 3 kênh để nhân với ảnh BGR
+                    mask_3d = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+                    
+                    # Trộn ảnh: Giữ background gốc, lấy foreground đã làm nét
+                    result = (result * (1.0 - mask_3d) + sharpened_result * mask_3d).astype(np.uint8)
+                except Exception as e:
+                    logger.warning(f"Person Masking thất bại, áp dụng toàn ảnh: {e}")
+                    warnings.append(f"Masking lỗi: {e}")
+                    result = sharpened_result
+            else:
+                result = sharpened_result
 
         # ── Step 4: Face Restore (optional) ─────────────────────────
         if s.face_restore_enabled and not cancel_flag.is_set():

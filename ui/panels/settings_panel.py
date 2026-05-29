@@ -238,6 +238,15 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         )
         self._sharpen_on.select()
         self._sharpen_on.pack(anchor="w", pady=(2, 4))
+        
+        self._sharpen_person_only = ctk.CTkSwitch(
+            c, text="🧍 Chỉ làm nét cơ thể (AI Person Mask)",
+            font=("Inter", 11), text_color="#2979ff",
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
+        )
+        self._sharpen_person_only.select()
+        self._sharpen_person_only.pack(anchor="w", pady=(0, 6))
 
         # AI mode toggle
         ai_row = ctk.CTkFrame(c, fg_color="#1e1a10", corner_radius=6)
@@ -446,6 +455,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             sharpen_amount=float(self._sharpen_amount.get()),
             sharpen_radius=float(self._sharpen_radius.get()),
             sharpen_threshold=int(self._sharpen_thresh.get()),
+            sharpen_person_only=bool(self._sharpen_person_only.get()),
             face_restore_enabled=bool(self._face_on.get()),
             face_restore_fidelity=float(self._face_fidelity.get()),
             face_restore_model=self._face_model_var.get(),
@@ -464,6 +474,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._scale_var.set(f"{s.upscale_factor}x")
         self._model_var.set(s.upscale_model)
         self._sharpen_on.select() if s.sharpen_enabled else self._sharpen_on.deselect()
+        self._sharpen_person_only.select() if s.sharpen_person_only else self._sharpen_person_only.deselect()
         self._sharpen_amount.set(s.sharpen_amount)
         self._sharpen_radius.set(s.sharpen_radius)
         self._sharpen_thresh.set(s.sharpen_threshold)
