@@ -35,6 +35,8 @@ class ImageViewer(ctk.CTkFrame):
         self._pan_x = 0
         self._pan_y = 0
         self._drag_start = None
+        self._space_down = False  # Giữ Space để kéo ảnh (giống Photoshop)
+        self._space_pan_start = None  # Lưu điểm bắt đầu pan khi giữ Space
 
         # Split divider (0.0 - 1.0)
         self._split_pos = 0.5
@@ -79,6 +81,12 @@ class ImageViewer(ctk.CTkFrame):
 
         # Hover info
         self._canvas.bind("<Motion>", self._on_mouse_move)
+        
+        # Space key pan (Photoshop style) — bind lên cả canvas và toplevel
+        self._canvas.bind("<KeyPress-space>", self._on_space_press)
+        self._canvas.bind("<KeyRelease-space>", self._on_space_release)
+        self._canvas.bind("<FocusIn>", lambda e: None)  # Enable key events
+        self._canvas.configure(takefocus=True)  # Canvas nhận focus keyboard
 
     def _build_toolbar(self):
         self._toolbar = ctk.CTkFrame(
@@ -419,6 +427,13 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_press(self, event):
+        self._canvas.focus_set()  # Grab keyboard focus khi click vào canvas
+        
+        # Space + drag = pan mode (Photoshop style), ưu tiên cao nhất
+        if self._space_down:
+            self._space_pan_start = (event.x - self._pan_x, event.y - self._pan_y)
+            return
+        
         if self._interactive_face_mode:
             # Vẽ hình chữ nhật mới
             self._drawing_box_start = (event.x, event.y)
@@ -451,6 +466,13 @@ class ImageViewer(ctk.CTkFrame):
             self._dragging_split = False
 
     def _on_drag(self, event):
+        # Space + drag = pan mọi lúc
+        if self._space_down and self._space_pan_start:
+            self._pan_x = event.x - self._space_pan_start[0]
+            self._pan_y = event.y - self._space_pan_start[1]
+            self._redraw()
+            return
+        
         if self._interactive_face_mode and self._drawing_box_start:
             if self._temp_box_id:
                 self._canvas.delete(self._temp_box_id)
@@ -495,14 +517,37 @@ class ImageViewer(ctk.CTkFrame):
             return
 
         self._drag_start = None
+        self._space_pan_start = None
         self._dragging_split = False
+
+    def _on_space_press(self, event):
+        if not self._space_down:
+            self._space_down = True
+            self._canvas.configure(cursor="fleur")  # Con trỏ bàn tay mở
+
+    def _on_space_release(self, event):
+        self._space_down = False
+        self._space_pan_start = None
+        # Khôi phục con trỏ
+        if self._interactive_face_mode:
+            self._canvas.configure(cursor="crosshair")
+        elif self._interactive_body_mode:
+            self._canvas.configure(cursor="hand2")
+        else:
+            self._canvas.configure(cursor="crosshair")
 
     def _on_resize(self, event):
         self._redraw()
 
     def _on_mouse_move(self, event):
+        if self._space_down:
+            self._canvas.configure(cursor="fleur")
+            return
         if self._interactive_face_mode:
             self._canvas.configure(cursor="crosshair")
+            return
+        if self._interactive_body_mode:
+            self._canvas.configure(cursor="hand2")
             return
             
         cw = self._canvas.winfo_width()
