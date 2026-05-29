@@ -82,11 +82,10 @@ class ImageViewer(ctk.CTkFrame):
         # Hover info
         self._canvas.bind("<Motion>", self._on_mouse_move)
         
-        # Space key pan (Photoshop style) — bind lên cả canvas và toplevel
-        self._canvas.bind("<KeyPress-space>", self._on_space_press)
-        self._canvas.bind("<KeyRelease-space>", self._on_space_release)
-        self._canvas.bind("<FocusIn>", lambda e: None)  # Enable key events
-        self._canvas.configure(takefocus=True)  # Canvas nhận focus keyboard
+        # Space key pan (Photoshop style) — bind lên toàn bộ cửa sổ (không cần canvas focus)
+        # Dùng bind_all để bắt mọi nơi trong app
+        self.bind_all("<KeyPress-space>", self._on_space_press)
+        self.bind_all("<KeyRelease-space>", self._on_space_release)
 
     def _build_toolbar(self):
         self._toolbar = ctk.CTkFrame(
@@ -427,8 +426,6 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_press(self, event):
-        self._canvas.focus_set()  # Grab keyboard focus khi click vào canvas
-        
         # Space + drag = pan mode (Photoshop style), ưu tiên cao nhất
         if self._space_down:
             self._space_pan_start = (event.x - self._pan_x, event.y - self._pan_y)
