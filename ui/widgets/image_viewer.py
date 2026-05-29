@@ -120,10 +120,17 @@ class ImageViewer(ctk.CTkFrame):
     # ── Public API ───────────────────────────────────────────────────
     def set_before(self, image: np.ndarray | None):
         self._before_img = image
+        # Reset về split mode mỗi khi load ảnh mới
+        self._split_mode = True
+        self._btn_split.configure(text="Split ◧", fg_color="#23355a", text_color="#7ab3f7")
         self._redraw()
 
     def set_after(self, image: np.ndarray | None):
         self._after_img = image
+        if image is not None:
+            # Tự động chuyển sang chế độ After để thấy kết quả ngay
+            self._split_mode = False
+            self._btn_split.configure(text="After ◨", fg_color="#1e3a1e", text_color="#3ecf8e")
         self._redraw()
 
     def clear(self):
@@ -155,9 +162,14 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _toggle_split(self):
-        self._split_mode = not self._split_mode
-        label = "Split ◧" if self._split_mode else "After ◨"
-        self._btn_split.configure(text=label)
+        if self._split_mode:
+            # Split → After
+            self._split_mode = False
+            self._btn_split.configure(text="After ◨", fg_color="#1e3a1e", text_color="#3ecf8e")
+        elif self._after_img is not None:
+            # After → Split (nếu có cả 2 ảnh)
+            self._split_mode = True
+            self._btn_split.configure(text="Split ◧", fg_color="#23355a", text_color="#7ab3f7")
         self._redraw()
 
     def _redraw(self):
