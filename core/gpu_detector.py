@@ -1,10 +1,9 @@
 """
 GPU Detection & Device Configuration
 Tự động phát hiện GPU và cấu hình device phù hợp.
+torch được import lazy — không crash khi chưa cài.
 """
-import torch
 import platform
-import psutil
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class GPUInfo:
     def __init__(self):
-        self.has_cuda = torch.cuda.is_available()
-        self.device_name = ""
+        self.has_cuda = False
+        self.device_name = "CPU"
         self.vram_gb = 0.0
         self.cuda_version = ""
         self.compute_capability = (0, 0)
@@ -21,10 +20,15 @@ class GPUInfo:
         self.supports_fp16 = False
         self.gpu_tier = "cpu"   # "cpu" | "low" | "mid" | "high"
 
-        if self.has_cuda:
-            self._detect_cuda()
+        try:
+            import torch  # lazy import — tránh crash khi torch chưa cài
+            self.has_cuda = torch.cuda.is_available()
+            if self.has_cuda:
+                self._detect_cuda(torch)
+        except ImportError:
+            logger.warning("torch chưa được cài đặt — chạy ở chế độ CPU.")
 
-    def _detect_cuda(self):
+    def _detect_cuda(self, torch):
         try:
             idx = torch.cuda.current_device()
             self.device_name = torch.cuda.get_device_name(idx)
@@ -55,8 +59,15 @@ class GPUInfo:
             self.has_cuda = False
             self.device_str = "cpu"
 
-    def get_torch_device(self) -> torch.device:
-        return torch.device(self.device_str)
+    def get_torch_device(self):
+        try:
+            import torch
+            return torch.device(self.device_str)
+        except ImportError:
+            raise ImportError(
+                "Thư viện 'torch' chưa được cài đặt.\n"
+                "Cài đặt theo hướng dẫn: https://pytorch.org/get-started/locally/"
+            )
 
     def recommended_tile_size(self) -> int:
         """Tile size cho Real-ESRGAN dựa trên VRAM."""
@@ -73,8 +84,13 @@ class GPUInfo:
 
     def summary(self) -> str:
         if not self.has_cuda:
-            ram = psutil.virtual_memory().total / (1024 ** 3)
-            return f"CPU Mode | RAM: {ram:.1f}GB | OS: {platform.system()}"
+            try:
+                import psutil
+                ram = psutil.virtual_memory().total / (1024 ** 3)
+                ram_str = f" | RAM: {ram:.1f}GB"
+            except ImportError:
+                ram_str = ""
+            return f"CPU Mode{ram_str} | OS: {platform.system()}"
         return (
             f"GPU: {self.device_name} | "
             f"VRAM: {self.vram_gb:.1f}GB | "
@@ -99,5 +115,5 @@ def get_gpu_info() -> GPUInfo:
     return _gpu_info
 
 
-def get_device() -> torch.device:
+def get_device():
     return get_gpu_info().get_torch_device()
