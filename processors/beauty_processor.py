@@ -182,22 +182,31 @@ class BeautyProcessor:
             
             disp_x += dx * slim_factor * factor
         
-        # ✅ Key fix: nhân displacement với person_mask TRƯỚC khi tạo warp map
-        # → Background pixels có mask=0 → displacement=0 → không bị dịch chuyển
+        # Warp toàn bộ ảnh với displacement đầy đủ (KHÔNG nhân với mask)
+        map_x_full = x_coords.astype(np.float32) + disp_x
+        map_y_full = y_coords.astype(np.float32)
+        warped_full = cv2.remap(img, map_x_full, map_y_full,
+                                interpolation=cv2.INTER_LINEAR,
+                                borderMode=cv2.BORDER_REFLECT)
+        
+        # Lấy person mask để composite
         person_mask = self._get_person_mask(img)
         
-        # Erode mask ~15px để co vào trong cơ thể người TRƯỚC khi blur
-        # → Vùng chuyển tiếp (feather) nằm BÊN TRONG người, không lan ra nền
-        erode_px = max(3, int(min(img.shape[:2]) * 0.008))  # ~0.8% min(h,w), ~15px với ảnh 2K
+        # Erode để mask nằm gọn trong người, tránh lan ra nền
+        erode_px = max(3, int(min(img.shape[:2]) * 0.008))
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1))
         person_mask_eroded = cv2.erode(person_mask, kernel, iterations=1)
-        person_mask_blurred = cv2.GaussianBlur(person_mask_eroded, (31, 31), 0)
+        person_mask_feather = cv2.GaussianBlur(person_mask_eroded, (31, 31), 0)
         
-        # Áp displacement đã được mask vào warp map
-        map_x = x_coords.astype(np.float32) + disp_x * person_mask_blurred
-        map_y = y_coords.astype(np.float32)
-        
-        result = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        # ✅ Composite đúng cách:
+        #   - Person pixels → từ warped_full (đã được slim)
+        #   - Background pixels → từ img gốc (KHÔNG bao giờ bị displaced)
+        # Khác hoàn toàn với cách cũ (blend displacement):
+        #   Cũ: map_x = x + disp * mask → vẫn lấy bg từ vị trí bị dịch chuyển một phần
+        #   Mới: result = mask * warped + (1-mask) * img → bg luôn = img[y,x] gốc
+        mask_3d = np.repeat(person_mask_feather[:, :, np.newaxis], 3, axis=2)
+        result = (img.astype(np.float32) * (1.0 - mask_3d) +
+                  warped_full.astype(np.float32) * mask_3d).astype(np.uint8)
         return result
 
     def apply_leg_stretch(self, img: np.ndarray, stretch_pct: float) -> np.ndarray:
