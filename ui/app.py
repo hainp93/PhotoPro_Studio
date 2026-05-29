@@ -194,6 +194,15 @@ class PhotoProApp(ctk.CTk):
             width=95, state="disabled", **act_kw,
         )
         self._btn_scan.pack(side="left", padx=(0, 6))
+        
+        self._btn_scan_body = ctk.CTkButton(
+            left, text="🧍 Quét Cơ Thể",
+            command=self._scan_bodies,
+            fg_color="transparent", hover_color="#1a2e3a", text_color="#00e676",
+            border_width=1, border_color=BORDER,
+            width=105, state="disabled", **act_kw,
+        )
+        self._btn_scan_body.pack(side="left", padx=(0, 6))
 
         self._btn_process = ctk.CTkButton(
             left, text="⚡  Xử Lý",
@@ -370,6 +379,7 @@ class PhotoProApp(ctk.CTk):
             self._viewer.fit_to_window()
             self._drop_hint.place_forget()
             self._btn_scan.configure(state="normal")
+            self._btn_scan_body.configure(state="normal")
             self._btn_process.configure(state="normal")
             self._btn_save.configure(state="disabled")
             h, w = img.shape[:2]
@@ -436,7 +446,30 @@ class PhotoProApp(ctk.CTk):
         self._viewer.set_face_interactive_mode(True, ai_bboxes=bboxes, callback=callback)
         self._update_progress(100.0, f"Đã tìm thấy {len(bboxes)} khuôn mặt. Kéo chuột để vẽ thêm nếu thiếu.")
 
-    # ── Single Processing ─────────────────────────────────────────────────
+    def _scan_bodies(self):
+        if self._original_image is None: return
+        self._set_processing_state(True)
+        self._update_progress(0, "Đang khởi tạo AI quét cơ thể...")
+        
+        def _worker():
+            try:
+                from processors.beauty_processor import BeautyProcessor
+                proc = BeautyProcessor()
+                bboxes = proc.detect_bodies(self._original_image)
+                
+                self.after(0, lambda: self._on_scan_body_done(bboxes))
+            except Exception as e:
+                self.after(0, lambda err=e: self._handle_error(f"Lỗi quét cơ thể: {err}"))
+                
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_scan_body_done(self, bboxes):
+        self._set_processing_state(False)
+        self._viewer.set_body_interactive_mode(True, bboxes=bboxes)
+        self._update_progress(100.0, f"Đã tìm thấy {len(bboxes)} người (Khung xanh lá).")
+
+    # ── Processing ───────────────────────────────────────────────────────
     def _process_single(self):
         if self._original_image is None:
             return

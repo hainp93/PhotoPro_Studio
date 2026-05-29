@@ -45,6 +45,11 @@ class ImageViewer(ctk.CTkFrame):
         self._interactive_face_mode = False
         self._ai_bboxes = []       # [(x1, y1, x2, y2), ...]
         self._manual_bboxes = []   # [(x1, y1, x2, y2), ...]
+        
+        # Body Detection Interactive Mode
+        self._interactive_body_mode = False
+        self._ai_body_bboxes = []  # [(x1, y1, x2, y2), ...]
+        
         self._drawing_box_start = None  # (canvas_x, canvas_y)
         self._temp_box_id = None
         self._on_manual_box_cb = None
@@ -165,6 +170,19 @@ class ImageViewer(ctk.CTkFrame):
             self._ai_bboxes = []
             self._manual_bboxes = []
             self._on_manual_box_cb = None
+            self._canvas.configure(cursor="crosshair")
+        self._redraw()
+
+    def set_body_interactive_mode(self, active: bool, bboxes: list = None):
+        """Bật/tắt chế độ xem khung cơ thể người."""
+        self._interactive_body_mode = active
+        if active:
+            # Force single view on before_img
+            self._split_mode = False
+            self._ai_body_bboxes = bboxes or []
+            self._canvas.configure(cursor="arrow") # Không cho phép vẽ manual body
+        else:
+            self._ai_body_bboxes = []
             self._canvas.configure(cursor="crosshair")
         self._redraw()
 
@@ -307,6 +325,18 @@ class ImageViewer(ctk.CTkFrame):
                 cx2, cy2 = self._img_to_canvas(x2, y2)
                 if cx2 > 0 and cy2 > 0 and cx1 < cw and cy1 < ch:
                     self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00e676", width=2, dash=(4, 2))
+                    
+        if self._interactive_body_mode:
+            # Vẽ body bbox (màu xanh lá)
+            for bbox in self._ai_body_bboxes:
+                x1, y1, x2, y2 = bbox
+                cx1, cy1 = self._img_to_canvas(x1, y1)
+                cx2, cy2 = self._img_to_canvas(x2, y2)
+                if cx2 > 0 and cy2 > 0 and cx1 < cw and cy1 < ch:
+                    self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00ff00", width=2, dash=(4, 4))
+                    
+                    # Vẽ text "Người"
+                    self._canvas.create_text(cx1, cy1 - 10, text="Người", fill="#00ff00", font=("Inter", 10, "bold"), anchor="w")
 
 
     def _draw_split(self, cw: int, ch: int):

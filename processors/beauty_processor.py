@@ -217,3 +217,24 @@ class BeautyProcessor:
         # Ghép lại
         res = np.vstack([top, bottom_stretched])
         return res
+
+    def detect_bodies(self, img: np.ndarray) -> list:
+        """
+        Quét ảnh và trả về danh sách bounding boxes của các cơ thể.
+        Trả về list các list [x1, y1, x2, y2].
+        """
+        if YOLO is None:
+            return []
+            
+        self._load_pose_model()
+        if self.pose_model is None:
+            return []
+            
+        results = self.pose_model(img, verbose=False)
+        bboxes = []
+        if len(results) > 0 and results[0].boxes is not None and len(results[0].boxes) > 0:
+            boxes = results[0].boxes.xyxy.cpu().numpy()
+            for box in boxes:
+                x1, y1, x2, y2 = box
+                bboxes.append([int(x1), int(y1), int(x2), int(y2)])
+        return bboxes
