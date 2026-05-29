@@ -29,7 +29,8 @@ class PipelineSettings:
     sharpen_ai_enabled: bool = False       # AI sharpen dùng Real-ESRGAN
     sharpen_ai_strength: float = 0.85      # blend strength
     sharpen_ai_model: str = "realesrgan-x4plus"
-    sharpen_amount: float = 2.5            # 0.0–3.0 (classical)
+    sharpen_method: str = "Bilateral"      # "Bilateral" | "USM"
+    sharpen_amount: float = 1.5            # 0.0–3.0
     sharpen_radius: float = 1.0            # pixels
     sharpen_threshold: int = 3             # 0–10
 
@@ -175,14 +176,22 @@ class Pipeline:
                         warnings.append(f"Làm nét thất bại: {e2}")
             else:
                 _progress("Đang làm nét...")
-                logger.debug("Pipeline: Classical Sharpen")
+                logger.debug(f"Pipeline: {s.sharpen_method} Sharpen")
                 try:
-                    result = proc.process(
-                        result,
-                        amount=s.sharpen_amount,
-                        radius=s.sharpen_radius,
-                        threshold=s.sharpen_threshold,
-                    )
+                    if s.sharpen_method == "USM":
+                        result = proc.process_usm(
+                            result,
+                            amount=s.sharpen_amount,
+                            radius=s.sharpen_radius,
+                            threshold=s.sharpen_threshold,
+                        )
+                    else:  # Bilateral (default)
+                        result = proc.process(
+                            result,
+                            amount=s.sharpen_amount,
+                            radius=s.sharpen_radius,
+                            threshold=s.sharpen_threshold,
+                        )
                 except Exception as e:
                     warnings.append(f"Làm nét thất bại: {e}")
 

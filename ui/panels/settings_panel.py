@@ -258,8 +258,31 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         # Classical controls
         self._sharpen_classical = ctk.CTkFrame(c, fg_color="transparent")
         self._sharpen_classical.pack(fill="x")
+
+        # Method selector
+        method_row = ctk.CTkFrame(self._sharpen_classical, fg_color="transparent")
+        method_row.pack(fill="x", pady=(2, 4))
+        ctk.CTkLabel(
+            method_row, text="Phương pháp",
+            font=("Inter", 12), text_color=TEXT_SECONDARY, anchor="w",
+        ).pack(side="left")
+        self._sharpen_method_var = ctk.StringVar(value="Bilateral")
+        ctk.CTkSegmentedButton(
+            method_row,
+            values=["Bilateral", "USM"],
+            variable=self._sharpen_method_var,
+            font=("Inter", 11),
+            fg_color="#1e1e3a",
+            selected_color=ACCENT_SHARPEN,
+            selected_hover_color="#d09010",
+            unselected_color="#1e1e3a",
+            unselected_hover_color="#252540",
+            text_color=TEXT_PRIMARY,
+            width=140,
+        ).pack(side="right")
+
         self._sharpen_amount, _ = _labeled_slider(
-            self._sharpen_classical, "Mức độ", 0, 3, 2.5, fmt=".1f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Mức độ", 0, 3, 1.5, fmt=".1f", accent=ACCENT_SHARPEN
         )
         self._sharpen_radius, _ = _labeled_slider(
             self._sharpen_classical, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT_SHARPEN
@@ -415,6 +438,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             sharpen_ai_enabled=bool(self._sharpen_ai_on.get()),
             sharpen_ai_strength=float(self._sharpen_ai_strength.get()),
             sharpen_ai_model=self._sharpen_ai_model_var.get(),
+            sharpen_method=self._sharpen_method_var.get(),
             sharpen_amount=float(self._sharpen_amount.get()),
             sharpen_radius=float(self._sharpen_radius.get()),
             sharpen_threshold=int(self._sharpen_thresh.get()),

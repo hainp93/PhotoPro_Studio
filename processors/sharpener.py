@@ -24,32 +24,81 @@ class Sharpener:
         threshold: int = 3,
     ) -> np.ndarray:
         """
-        image: BGR uint8
-        amount  : 0.0–3.0, mức độ làm nét
-        radius  : sigma của Gaussian blur (pixels)
-        threshold: ngưỡng pixel diff để apply sharpening (0–10)
+        Bilateral Detail Enhancement — không tạo halo, mịn hơn USM.
+        
+        Thuật toán:
+          1. Tách base layer bằng bilateral filter (edge-preserving)
+          2. Detail = original - base
+          3. Sharpened = base + (1 + amount) × detail
+        
+        Ưu điểm so với Unsharp Mask:
+          - Không tạo halo quanh cạnh
+          - Xử lý rìa ảnh tốt (bilateral filter không bị edge artifacts)
+          - Mịn, tự nhiên hơn
         """
         if amount <= 0:
             return image
 
-        # Làm việc trên float32 để tránh overflow
         img_f = image.astype(np.float32)
 
-        # Unsharp Mask
-        ksize = max(3, int(radius * 6) | 1)  # odd number
-        blurred = cv2.GaussianBlur(img_f, (ksize, ksize), radius)
-        detail = img_f - blurred
+        # Bilateral filter: edge-preserving, sigma tuned theo amount
+        sigma_color = max(20, int(40 + amount * 10))
+        sigma_space = max(10, int(radius * 20))
+        d = max(5, int(radius * 8) | 1)  # diameter, odd
 
-        # Threshold: chỉ sharpen pixel có detail đủ lớn
+        # Bilateral filter: tách base (smooth nhưng giữ cạnh)
+        base = cv2.bilateralFilter(
+            image,                    # dùng uint8 để bilateral nhanh hơn
+            d=d,
+            sigmaColor=sigma_color,
+            sigmaSpace=sigma_space,
+        ).astype(np.float32)
+
+        # Detail layer = high-frequency info
+        detail = img_f - base
+
+        # Threshold: bỏ qua noise nhỏ (nhiễu sensor)
         if threshold > 0:
             mask = np.abs(detail) > threshold
             detail = np.where(mask, detail, 0)
 
-        sharpened = img_f + amount * detail
+        # Boost detail
+        sharpened = base + (1.0 + amount) * detail
 
-        # Clip và convert
-        result = np.clip(sharpened, 0, 255).astype(np.uint8)
-        return result
+        return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+    def process_usm(
+        self,
+        image: np.ndarray,
+        amount: float = 1.0,
+        radius: float = 1.0,
+        threshold: int = 3,
+    ) -> np.ndarray:
+        """
+        Unsharp Mask cổ điển (dự phòng).
+        Dùng BORDER_REFLECT để tránh dark artifacts ở rìa ảnh.
+        """
+        if amount <= 0:
+            return image
+
+        img_f = image.astype(np.float32)
+        h, w = img_f.shape[:2]
+        ksize = max(3, int(radius * 6) | 1)
+        pad = ksize
+
+        # Padding để tránh rìa ảnh bị tối
+        padded = cv2.copyMakeBorder(
+            img_f, pad, pad, pad, pad, cv2.BORDER_REFLECT_101
+        )
+        blurred_padded = cv2.GaussianBlur(padded, (ksize, ksize), radius)
+        blurred = blurred_padded[pad:pad+h, pad:pad+w]
+
+        detail = img_f - blurred
+        if threshold > 0:
+            mask = np.abs(detail) > threshold
+            detail = np.where(mask, detail, 0)
+
+        return np.clip(img_f + amount * detail, 0, 255).astype(np.uint8)
 
     def process_wavelet(
         self,
