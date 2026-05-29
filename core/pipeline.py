@@ -33,6 +33,10 @@ class PipelineSettings:
     upscale_tile: int = 0                  # 0 = auto
     upscale_max_long_side: int = 0         # 0 = không giới hạn, > 0 = giới hạn cạnh dài (px)
 
+    # --- Auto Brighten ---
+    auto_brighten: bool = False            # Tăng sáng tự động bằng CLAHE
+    auto_brighten_strength: float = 2.0    # clip_limit cho CLAHE (1-4)
+
     # --- Sharpen ---
     sharpen_enabled: bool = True
     sharpen_ai_enabled: bool = False       # AI sharpen dùng Real-ESRGAN
@@ -122,6 +126,7 @@ class Pipeline:
         result = image.copy()
         steps_total = sum([
             s.beauty_enabled,
+            getattr(s, "auto_brighten", False),
             s.denoise_enabled,
             s.upscale_enabled,
             s.sharpen_enabled,
@@ -162,7 +167,21 @@ class Pipeline:
                     logger.warning(msg)
                     warnings.append(msg)
 
-        # ── Step 1: Denoise ──────────────────────────────────────────
+        # ── Step A: Auto Brighten (CLAHE) ────────────────────────────
+        if getattr(s, "auto_brighten", False) and not cancel_flag.is_set():
+            _progress("Tăng sáng tự động...")
+            try:
+                clip_limit = float(getattr(s, "auto_brighten_strength", 2.0))
+                lab = cv2.cvtColor(result, cv2.COLOR_BGR2LAB)
+                l_ch, a_ch, b_ch = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
+                l_ch = clahe.apply(l_ch)
+                result = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+                logger.debug(f"CLAHE applied: clip_limit={clip_limit}")
+            except Exception as e:
+                logger.warning(f"Auto brighten thất bại: {e}")
+
+        # ── Step 1: Denoise ────────────────────────────────────────────
         if s.denoise_enabled and not cancel_flag.is_set():
             _progress("Đang khử noise...")
             logger.debug("Pipeline: Denoise")

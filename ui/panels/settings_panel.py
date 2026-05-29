@@ -146,8 +146,87 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._gpu = gpu  # GPUInfo hoặc None
         self._build_ui()
 
+    # ── Preset values (mức mặc định tự nhiên, không quá lộ) ──────────────
+    PRESET_SLIM      = 40   # 40/100 → nén 4% chiều ngang
+    PRESET_STRETCH   = 45   # 45/100 → kéo 5.4% chiều cao
+    PRESET_SKIN_TONE = 45   # da trắng hồng 45%
+    PRESET_SKIN_SMOOTH = 55 # mịn da 55%
+    PRESET_BRIGHT    = True  # bật tăng sáng auto (CLAHE)
+
     def _build_ui(self):
         pad = {"padx": 8, "pady": 3}
+
+        # ── ⚡ Quick Presets ─────────────────────────────────────────────
+        PRESET_ACCENT = "#f5a623"
+        self._sec_presets = SectionFrame(
+            self, title="Tuỳ Chỉnh Nhanh", accent=PRESET_ACCENT, icon="⚡"
+        )
+        self._sec_presets.pack(fill="x", **pad)
+        cp = self._sec_presets.content
+
+        ctk.CTkLabel(
+            cp, text="Tick để áp ngay — mức tự nhiên, không quá lộ",
+            font=("Inter", 10), text_color=TEXT_DIM, anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+
+        def _make_preset_cb(text, icon, on_toggle):
+            row = ctk.CTkFrame(cp, fg_color="#1a1a2e", corner_radius=8)
+            row.pack(fill="x", pady=2)
+            var = ctk.BooleanVar(value=False)
+            cb = ctk.CTkCheckBox(
+                row, text=f"{icon}  {text}", variable=var,
+                font=("Inter", 12), text_color=TEXT_PRIMARY,
+                checkbox_width=18, checkbox_height=18,
+                fg_color=PRESET_ACCENT, hover_color=PRESET_ACCENT,
+                border_color="#444",
+                command=lambda: on_toggle(var.get()),
+            )
+            cb.pack(anchor="w", padx=10, pady=6)
+            return var
+
+        def _on_slim(checked):
+            self._beauty_on.select()
+            self._body_slim.set(self.PRESET_SLIM if checked else 0)
+
+        def _on_stretch(checked):
+            self._beauty_on.select()
+            self._leg_stretch.set(self.PRESET_STRETCH if checked else 0)
+
+        def _on_skin(checked):
+            self._beauty_on.select()
+            self._skin_tone.set(self.PRESET_SKIN_TONE if checked else 0)
+            self._skin_smooth.set(self.PRESET_SKIN_SMOOTH if checked else 0)
+
+        def _on_bright(checked):
+            if checked:
+                self._auto_bright_on.select()
+            else:
+                self._auto_bright_on.deselect()
+
+        self._preset_slim_var    = _make_preset_cb("Thon gọn",       "👗", _on_slim)
+        self._preset_stretch_var = _make_preset_cb("Dài chân",       "📏", _on_stretch)
+        self._preset_skin_var    = _make_preset_cb("Da trắng hồng",  "✨", _on_skin)
+        self._preset_bright_var  = _make_preset_cb("Tăng sáng auto", "☀️", _on_bright)
+
+        # ── ☀️ Auto Brighten (CLAHE) ──────────────────────────────────
+        BRIGHT_ACCENT = "#ffd600"
+        self._sec_bright = SectionFrame(
+            self, title="Tăng Sáng", accent=BRIGHT_ACCENT, icon="☀️"
+        )
+        self._sec_bright.pack(fill="x", **pad)
+        cb_bright = self._sec_bright.content
+
+        self._auto_bright_on = ctk.CTkSwitch(
+            cb_bright, text="Tăng sáng tự động (CLAHE)",
+            font=("Inter", 12), text_color=TEXT_PRIMARY,
+            button_color=BRIGHT_ACCENT, button_hover_color=BRIGHT_ACCENT,
+            progress_color=BRIGHT_ACCENT,
+        )
+        self._auto_bright_on.pack(anchor="w", pady=(2, 4))
+        self._bright_strength, _ = _labeled_slider(
+            cb_bright, "Cường độ", 0.5, 4.0, 2.0, steps=35, fmt=".1f",
+            accent=BRIGHT_ACCENT
+        )
 
         # ── Beauty & Body ─────────────────────────────────────────────
         self._sec_beauty = SectionFrame(
@@ -168,6 +247,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._skin_tone, _ = _labeled_slider(c, "Trắng hồng", 0, 100, 0, fmt=".0f", accent="#ff4081")
         self._body_slim, _ = _labeled_slider(c, "Thon gọn", 0, 100, 0, fmt=".0f", accent="#ff4081")
         self._leg_stretch, _ = _labeled_slider(c, "Kéo dài chân", 0, 100, 0, fmt=".0f", accent="#ff4081")
+
 
         # ── Denoise ───────────────────────────────────────────────────
         self._sec_denoise = SectionFrame(
@@ -511,6 +591,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             face_restore_fidelity=float(self._face_fidelity.get()),
             face_restore_model=self._face_model_var.get(),
             face_restore_high_res=bool(self._face_high_res.get()),
+            auto_brighten=bool(self._auto_bright_on.get()),
+            auto_brighten_strength=float(self._bright_strength.get()),
             export_format=self._fmt_var.get(),
             export_quality=int(self._quality_slider.get()),
             export_suffix=self._suffix_entry.get() or "_enhanced",
