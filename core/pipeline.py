@@ -2,6 +2,7 @@
 Processing Pipeline — quản lý chuỗi xử lý ảnh.
 Mỗi bước có thể bật/tắt độc lập.
 """
+import cv2
 import numpy as np
 import logging
 import threading
