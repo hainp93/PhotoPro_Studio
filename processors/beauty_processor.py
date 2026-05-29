@@ -154,9 +154,23 @@ class BeautyProcessor:
             disp_x += dx * slim_factor * factor
             
         # 2. Thon gọn cơ thể (Body Slimming)
-        for cx, cy, h_box in bodies:
-            radius = h_box * 0.5 
-            slim_factor = (strength / 100.0) * 0.6
+        for (cx, cy, h_box), box_info in zip(bodies, results[0].boxes.xyxy.cpu().numpy()):
+            bx1, by1, bx2, by2 = box_info
+            radius = h_box * 0.5
+            base_factor = (strength / 100.0) * 0.6
+            
+            # Giảm dần cường độ slim cho người ở gần rìa ảnh
+            # Người bị cắt ở rìa → mask thiếu → artifact → giảm effect
+            edge_margin = radius * 0.5  # vùng an toàn = nửa bán kính
+            left_dist  = max(0.0, bx1)           # khoảng cách từ mép trái bbox đến rìa trái
+            right_dist = max(0.0, w - bx2)        # khoảng cách từ mép phải bbox đến rìa phải
+            top_dist   = max(0.0, by1)
+            min_edge_dist = min(left_dist, right_dist, top_dist)
+            edge_fade = float(np.clip(min_edge_dist / max(edge_margin, 1.0), 0.0, 1.0))
+            slim_factor = base_factor * edge_fade
+            
+            if slim_factor < 0.001:
+                continue  # người quá sát rìa, bỏ qua hoàn toàn
             
             dx = x_coords - cx
             dy = y_coords - cy
