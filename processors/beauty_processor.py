@@ -240,6 +240,27 @@ class BeautyProcessor:
         person_mask = self._get_person_mask(img)
         leg_mask = person_mask.copy()
         leg_mask[:hip_y, :] = 0  # Phần trên hông không chỉnh
+        
+        # Mở rộng mask xuống tận đáy ảnh để tránh vết cắt ở bàn chân (vectorized)
+        # Tìm hàng cuối cùng có mask > 0.05 theo từng cột
+        has_mask = (leg_mask > 0.05).astype(np.float32)  # (H, W)
+        # cummax từ dưới lên để tìm last_row cho từng cột
+        # Cách nhanh: dùng flip cummax
+        flipped = has_mask[::-1, :]
+        cum = np.maximum.accumulate(flipped, axis=0)
+        bottom_mask = cum[::-1, :]  # 1 ở tất cả hàng từ first_row trở xuống
+        
+        # Tạo gradient fade: ở hàng last_row = 1.0, ở đáy ảnh = 0.0
+        # Dùng khoảng cách từ đáy ảnh: row_from_bottom
+        row_from_bottom = np.arange(h - 1, -1, -1, dtype=np.float32)  # h-1, h-2, ..., 0
+        # Normalize: max_dist = h-1
+        fade_grad = (row_from_bottom / (h - 1))[:, np.newaxis]  # (H, 1), 1.0 ở top, 0.0 ở bottom
+        
+        # Chỉ áp dụng fade ở vùng dưới bàn chân (nơi person_mask gần 0 nhưng bottom_mask = 1)
+        below_feet = (bottom_mask > 0) * (leg_mask < 0.05)
+        leg_mask = leg_mask + below_feet * fade_grad * 0.6  # Thêm gradient mờ dần ở dưới chân
+        leg_mask = np.clip(leg_mask, 0, 1)
+        
         leg_mask = cv2.GaussianBlur(leg_mask, (51, 51), 0)
         
         mask_3d = np.repeat(leg_mask[:, :, np.newaxis], 3, axis=2)
