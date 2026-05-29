@@ -172,18 +172,17 @@ class FaceRestorer:
         model_name: str = "codeformer",
         upsample: bool = True,
         bg_upscale: bool = True,
+        high_res: bool = True,
     ) -> np.ndarray:
         """
         image    : BGR uint8
         fidelity : 0.0 = AI hoàn toàn | 1.0 = giữ nguyên gốc
         upsample : upscale khuôn mặt 2x sau khi restore
         bg_upscale: dùng RealESRGAN để upscale background
-
-        Pipeline giống Wedding Beauty Studio.
+        high_res : quét toàn bộ ảnh để dò tìm mặt (tốn VRAM nhưng bắt được mặt nhỏ)
         """
         from torchvision.transforms.functional import normalize as norm_fn
         from basicsr.utils import img2tensor, tensor2img
-        from facelib.utils.misc import is_gray
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -194,10 +193,14 @@ class FaceRestorer:
         face_helper.clean_all()
         face_helper.read_image(image)
 
+        # Nếu high_res = True, không resize ảnh khi detect và hạ threshold khoảng cách mắt
+        resize_dim = None if high_res else 640
+        eye_dist = 3 if high_res else 5
+
         num_faces = face_helper.get_face_landmarks_5(
-            only_center_face=False, resize=640, eye_dist_threshold=5
+            only_center_face=False, resize=resize_dim, eye_dist_threshold=eye_dist
         )
-        logger.info(f"FaceRestorer: phát hiện {num_faces} khuôn mặt")
+        logger.info(f"FaceRestorer: phát hiện {num_faces} khuôn mặt (high_res={high_res})")
 
         if num_faces == 0:
             logger.info("Không có mặt → bỏ qua face restore")

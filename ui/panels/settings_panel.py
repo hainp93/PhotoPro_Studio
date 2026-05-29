@@ -336,6 +336,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         )
         self._face_on.pack(anchor="w", pady=(2, 4))
 
+        self._face_high_res = ctk.CTkSwitch(
+            c, text="Quét toàn bộ ảnh (tìm mặt ở xa)",
+            font=("Inter", 11), text_color="#d45090",
+            button_color=ACCENT_FACE, button_hover_color=ACCENT_FACE,
+            progress_color=ACCENT_FACE,
+        )
+        self._face_high_res.pack(anchor="w", pady=(0, 6))
+
         self._face_fidelity, _ = _labeled_slider(
             c, "Fidelity (0=AI, 1=Original)", 0, 1, 0.5,
             fmt=".2f", accent=ACCENT_FACE,
@@ -445,6 +453,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             face_restore_enabled=bool(self._face_on.get()),
             face_restore_fidelity=float(self._face_fidelity.get()),
             face_restore_model=self._face_model_var.get(),
+            face_restore_high_res=bool(self._face_high_res.get()),
             export_format=self._fmt_var.get(),
             export_quality=int(self._quality_slider.get()),
             export_suffix=self._suffix_entry.get() or "_enhanced",
@@ -463,6 +472,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._sharpen_radius.set(s.sharpen_radius)
         self._sharpen_thresh.set(s.sharpen_threshold)
         self._face_on.select() if s.face_restore_enabled else self._face_on.deselect()
+        self._face_high_res.select() if getattr(s, "face_restore_high_res", True) else self._face_high_res.deselect()
         self._face_fidelity.set(s.face_restore_fidelity)
         self._face_model_var.set(s.face_restore_model)
         self._fmt_var.set(s.export_format)
