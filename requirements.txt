@@ -1,45 +1,27 @@
-# ============================================================
 # PhotoPro Studio — Requirements
-# Target: Python 3.10 | CUDA 12.8 | RTX 5090
-# ============================================================
 
-# --- UI ---
-customtkinter>=5.2.2
-Pillow>=10.4.0
+# Core
+numpy>=1.24
+opencv-python>=4.8
+pillow>=10.0
+tqdm
+requests
+rawpy
 
-# --- Image Processing (core) ---
-opencv-python>=4.10.0
-numpy>=1.26.4
-scipy>=1.13.0
-scikit-image>=0.23.0
+# UI
+customtkinter>=5.2
+darkdetect
 
-# --- Deep Learning (GPU - CUDA 12.8) ---
-# Install manually on VM:
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-torch>=2.7.0
-torchvision>=0.22.0
+# AI (optional but recommended — cần cho Face Restore + AI Sharpen)
+# Torch: cài manual theo GPU:
+#   RTX 5090 (CUDA 12.8): pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#   RTX 30/40 (CUDA 12.1): pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#   CPU only:              pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# --- Super Resolution ---
-basicsr>=1.4.2
-realesrgan>=0.3.0
+basicsr==1.4.2
+realesrgan
+facelib
 
-# --- Face Restoration ---
-facexlib>=0.3.0
-gfpgan>=1.3.8
-
-# --- Face Detection ---
-insightface>=0.7.3
-onnxruntime-gpu>=1.18.0   # GPU inference for InsightFace/ONNX models
-
-# --- RAW Image Support ---
-rawpy>=0.22.0
-
-# --- Utilities ---
-psutil>=6.0.0
-requests>=2.32.0
-tqdm>=4.67.0
-pyyaml>=6.0.2
-colorama>=0.4.6
-
-# --- Build ---
-pyinstaller>=6.10.0
+# CodeFormer: cài từ GitHub
+#   git clone https://github.com/sczhou/CodeFormer.git
+#   cd CodeFormer && pip install -e . --no-deps

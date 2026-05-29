@@ -1,135 +1,158 @@
 """
 setup_models.py — Thiết lập model weights cho PhotoPro Studio.
 
-2 cách:
-  1. Copy từ Wedding Beauty Studio (nếu đã cài trên máy)
-  2. Download từ internet
+Ưu tiên:
+  1. Copy từ Wedding Beauty Studio nếu có trên máy
+  2. Download từ GitHub (tất cả đều là open-source models)
 
 Chạy: python scripts/setup_models.py
 """
-import shutil
 import sys
+import shutil
+import urllib.request
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 WEIGHTS = ROOT / "weights"
 
-# Đường dẫn Wedding Beauty Studio trên máy này
+# Wedding Beauty Studio path (chỉ có trên máy dev)
 WEDDING_WEIGHTS = Path(
     r"f:\Setup\Wedding Beauty Studio V9.5\Wedding Beauty Studio V9.5\VGA\weights"
 )
 
-# Mapping: (nguồn từ Wedding, đích trong PhotoPro)
-COPY_MAP = {
-    "CodeFormer/codeformer.pth":                ("CodeFormer", "codeformer.pth"),
-    "realesrgan/RealESRGAN_x2plus.pth":         ("realesrgan", "RealESRGAN_x2plus.pth"),
-    "detection/detection_Resnet50_Final.pth":   ("facelib", "detection_Resnet50_Final.pth"),
-    "facelib/parsing_parsenet.pth":             ("facelib", "parsing_parsenet.pth"),
+# Tất cả models đều open-source, download từ GitHub
+MODELS = {
+    ("CodeFormer", "codeformer.pth"): {
+        "url": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
+        "size_mb": 376,
+        "wedding_src": "CodeFormer/codeformer.pth",
+    },
+    ("realesrgan", "RealESRGAN_x2plus.pth"): {
+        "url": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth",
+        "size_mb": 67,
+        "wedding_src": "realesrgan/RealESRGAN_x2plus.pth",
+    },
+    ("facelib", "detection_Resnet50_Final.pth"): {
+        "url": "https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+        "size_mb": 109,
+        "wedding_src": "detection/detection_Resnet50_Final.pth",
+    },
+    ("facelib", "parsing_parsenet.pth"): {
+        "url": "https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth",
+        "size_mb": 85,
+        "wedding_src": "facelib/parsing_parsenet.pth",
+    },
 }
 
-# URLs để download nếu không có Wedding app
-DOWNLOAD_URLS = {
-    ("CodeFormer", "codeformer.pth"):
-        "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
-    ("realesrgan", "RealESRGAN_x2plus.pth"):
-        "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth",
-    ("facelib", "detection_Resnet50_Final.pth"):
-        "https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth",
-    ("facelib", "parsing_parsenet.pth"):
-        "https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth",
-}
+
+class ProgressBar:
+    def __init__(self, total_mb):
+        self.total = total_mb * 1024 * 1024
+        self.downloaded = 0
+
+    def __call__(self, count, block_size, total_size):
+        if total_size > 0:
+            self.total = total_size
+        self.downloaded += block_size
+        pct = min(100, self.downloaded * 100 // self.total)
+        bar = "=" * (pct // 5) + " " * (20 - pct // 5)
+        mb = self.downloaded / 1024 / 1024
+        total_mb = self.total / 1024 / 1024
+        print(f"\r  [{bar}] {pct}% {mb:.1f}/{total_mb:.1f}MB", end="", flush=True)
+        if self.downloaded >= self.total:
+            print()
 
 
-def copy_from_wedding():
+def try_copy_from_wedding(dst_dir, dst_name, wedding_src) -> bool:
     if not WEDDING_WEIGHTS.exists():
-        print(f"❌ Không tìm thấy Wedding Beauty Studio tại: {WEDDING_WEIGHTS}")
         return False
-
-    print(f"✅ Tìm thấy Wedding Beauty Studio: {WEDDING_WEIGHTS}")
-    all_ok = True
-
-    for src_rel, (dst_dir, dst_name) in COPY_MAP.items():
-        src = WEDDING_WEIGHTS / src_rel
-        dst_folder = WEIGHTS / dst_dir
-        dst = dst_folder / dst_name
-
-        if dst.exists():
-            print(f"  ⏭  {dst_name} đã có ({dst.stat().st_size // 1024 // 1024}MB)")
-            continue
-
-        if not src.exists():
-            print(f"  ❌ Không tìm thấy nguồn: {src}")
-            all_ok = False
-            continue
-
-        dst_folder.mkdir(parents=True, exist_ok=True)
-        print(f"  📋 Copy {src.name} ({src.stat().st_size // 1024 // 1024}MB)...", end="", flush=True)
-        shutil.copy2(src, dst)
-        print(" ✅")
-
-    return all_ok
+    src = WEDDING_WEIGHTS / wedding_src
+    if not src.exists():
+        return False
+    dst = WEIGHTS / dst_dir / dst_name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    print(f"  [Wedding] Copy {dst_name} ({src.stat().st_size // 1024 // 1024}MB)...", end="")
+    shutil.copy2(src, dst)
+    print(" OK")
+    return True
 
 
-def download_models():
-    print("\n📥 Download model từ internet...")
+def download_model(dst_dir, dst_name, url, size_mb) -> bool:
+    dst = WEIGHTS / dst_dir / dst_name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(".tmp")
+
+    print(f"  [Download] {dst_name} (~{size_mb}MB)")
+    print(f"  URL: {url}")
     try:
-        from basicsr.utils.download_util import load_file_from_url
-    except ImportError:
-        print("❌ basicsr chưa cài. Chạy: pip install basicsr")
+        progress = ProgressBar(size_mb)
+        urllib.request.urlretrieve(url, tmp, reporthook=progress)
+        tmp.rename(dst)
+        print(f"  OK -> {dst}")
+        return True
+    except Exception as e:
+        print(f"\n  FAILED: {e}")
+        if tmp.exists():
+            tmp.unlink()
         return False
 
-    all_ok = True
-    for (dst_dir, dst_name), url in DOWNLOAD_URLS.items():
-        dst_folder = WEIGHTS / dst_dir
-        dst = dst_folder / dst_name
 
+def setup_all():
+    print("=" * 60)
+    print("PhotoPro Studio - Model Setup")
+    print("=" * 60)
+
+    wedding_available = WEDDING_WEIGHTS.exists()
+    if wedding_available:
+        print(f"Wedding Beauty Studio found: {WEDDING_WEIGHTS}")
+    else:
+        print("Wedding Beauty Studio not found - will download from GitHub")
+
+    print()
+    all_ok = True
+
+    for (dst_dir, dst_name), info in MODELS.items():
+        dst = WEIGHTS / dst_dir / dst_name
         if dst.exists():
-            print(f"  ⏭  {dst_name} đã có ({dst.stat().st_size // 1024 // 1024}MB)")
+            mb = dst.stat().st_size // 1024 // 1024
+            print(f"  [SKIP] {dst_name} already exists ({mb}MB)")
             continue
 
-        dst_folder.mkdir(parents=True, exist_ok=True)
-        print(f"  ⬇  Download {dst_name}...")
-        try:
-            load_file_from_url(url, model_dir=str(dst_folder), progress=True)
-            print(f"  ✅ {dst_name}")
-        except Exception as e:
-            print(f"  ❌ Lỗi: {e}")
+        print(f"\n  --> {dst_name}")
+
+        # Try Wedding app first
+        if wedding_available and try_copy_from_wedding(
+            dst_dir, dst_name, info["wedding_src"]
+        ):
+            continue
+
+        # Download from GitHub
+        ok = download_model(dst_dir, dst_name, info["url"], info["size_mb"])
+        if not ok:
             all_ok = False
 
-    return all_ok
-
-
-def verify():
-    print("\n📋 Kiểm tra model:")
-    all_ok = True
-    for (dst_dir, dst_name) in DOWNLOAD_URLS.keys():
+    print()
+    print("=" * 60)
+    print("Verification:")
+    for (dst_dir, dst_name) in MODELS.keys():
         p = WEIGHTS / dst_dir / dst_name
-        exists = p.exists()
-        size_mb = p.stat().st_size // 1024 // 1024 if exists else 0
-        status = f"✅ {size_mb}MB" if exists else "❌ THIẾU"
-        print(f"  {status}  {dst_dir}/{dst_name}")
-        if not exists:
+        if p.exists():
+            mb = p.stat().st_size // 1024 // 1024
+            print(f"  OK  {mb:>4}MB  {dst_dir}/{dst_name}")
+        else:
+            print(f"  MISSING       {dst_dir}/{dst_name}")
             all_ok = False
+
+    print("=" * 60)
+    if all_ok:
+        print("All models ready! Run: python main.py")
+    else:
+        print("Some models missing. Check internet connection and try again.")
+
     return all_ok
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("PhotoPro Studio — Model Setup")
-    print("=" * 60)
-
-    # Ưu tiên copy từ Wedding app
-    copied = copy_from_wedding()
-
-    if not copied:
-        print("\n⬇  Thử download từ internet...")
-        download_models()
-
-    all_ready = verify()
-
-    if all_ready:
-        print("\n🎉 Tất cả model đã sẵn sàng! Khởi động app: python main.py")
-    else:
-        print("\n⚠  Một số model còn thiếu. App vẫn chạy nhưng Face Restore và Upscale sẽ bị tắt.")
-
-    sys.exit(0 if all_ready else 1)
+    ok = setup_all()
+    sys.exit(0 if ok else 1)
