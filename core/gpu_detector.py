@@ -26,7 +26,7 @@ class GPUInfo:
             if self.has_cuda:
                 self._detect_cuda(torch)
         except ImportError:
-            logger.warning("torch chưa được cài đặt — chạy ở chế độ CPU.")
+            logger.warning("torch not installed — running in CPU-only mode.")
 
     def _detect_cuda(self, torch):
         try:
