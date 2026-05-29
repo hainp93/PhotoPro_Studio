@@ -78,6 +78,16 @@ class BeautyProcessor:
         result = (img * (1.0 - mask_3d) + smoothed * mask_3d).astype(np.uint8)
         return result
 
+    def _get_person_mask(self, img: np.ndarray) -> np.ndarray:
+        """Lấy person mask (float32 0-1) dùng PersonSegmenter."""
+        try:
+            from processors.person_segmenter import PersonSegmenter
+            mask = PersonSegmenter().get_person_mask(img, feather_amount=31)
+            return mask
+        except Exception as e:
+            logger.warning(f"PersonSegmenter failed: {e}. Dùng mask toàn trắng.")
+            return np.ones(img.shape[:2], dtype=np.float32)
+
     def apply_body_slim(self, img: np.ndarray, strength: float) -> np.ndarray:
         """
         Thon gọn cơ thể và khuôn mặt.
@@ -159,15 +169,21 @@ class BeautyProcessor:
             
             map_x += dx * slim_factor * factor
             
-        # Thực hiện warp 1 lần duy nhất cho toàn bộ ảnh
-        res = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-        return res
+        # Warp toàn ảnh
+        warped = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        
+        # ✅ Blend: chỉ lấy phần người từ warped, background giữ nguyên từ ảnh gốc
+        person_mask = self._get_person_mask(img)
+        person_mask = cv2.GaussianBlur(person_mask, (51, 51), 0)
+        mask_3d = np.repeat(person_mask[:, :, np.newaxis], 3, axis=2)
+        result = (img.astype(np.float32) * (1.0 - mask_3d) + warped.astype(np.float32) * mask_3d).astype(np.uint8)
+        return result
 
     def apply_leg_stretch(self, img: np.ndarray, stretch_pct: float) -> np.ndarray:
         """
-        Kéo dài chân bằng cách dãn nửa dưới cơ thể theo trục dọc.
-        Làm thay đổi kích thước ảnh (ảnh sẽ cao hơn).
-        stretch_pct: 0-100 (100 = giãn 20%)
+        Kéo dài chân bằng warp gradient.
+        Chỉ dãn vùng từ hông xuống. Background giữ nguyên nhờ blend person mask.
+        stretch_pct: 0-100 (100 = giãn 15%)
         """
         if stretch_pct <= 0 or YOLO is None:
             return img
@@ -176,49 +192,59 @@ class BeautyProcessor:
         if self.pose_model is None:
             return img
             
-        results = self.pose_model(img, verbose=False)
+        results = self.pose_model(img, verbose=False, imgsz=1280, conf=0.15)
         hips_y = []
         
-        # Tìm vị trí hông của những người trong ảnh (keypoints 11, 12)
         if len(results) > 0 and results[0].keypoints is not None:
             kpts = results[0].keypoints.xy.cpu().numpy()
             for p in kpts:
-                if len(p) >= 13: # Cần ít nhất tới điểm 12
+                if len(p) >= 13:
                     left_hip = p[11]
                     right_hip = p[12]
-                    # Nếu có tọa độ y > 0
                     if left_hip[1] > 0 and right_hip[1] > 0:
-                        hips_y.append( (left_hip[1] + right_hip[1]) / 2.0 )
+                        hips_y.append((left_hip[1] + right_hip[1]) / 2.0)
                     elif left_hip[1] > 0:
                         hips_y.append(left_hip[1])
                     elif right_hip[1] > 0:
                         hips_y.append(right_hip[1])
                         
         h, w = img.shape[:2]
-        if not hips_y:
-            # Fallback nếu không thấy hông: cắt ở 60% chiều cao
-            split_y = int(h * 0.6)
-        else:
-            # Lấy vị trí hông thấp nhất (gần dưới cùng nhất) hoặc trung bình
-            split_y = int(np.mean(hips_y))
-            
-        # Ràng buộc split_y
-        split_y = max(int(h*0.2), min(int(h*0.8), split_y))
+        hip_y = int(np.mean(hips_y)) if hips_y else int(h * 0.55)
+        hip_y = max(int(h * 0.2), min(int(h * 0.80), hip_y))
+        leg_len = h - hip_y
         
-        # Cắt ảnh
-        top = img[0:split_y, :]
-        bottom = img[split_y:h, :]
+        max_stretch = 0.15  # Tối đa 15%
+        stretch_factor = (stretch_pct / 100.0) * max_stretch
+        max_disp = leg_len * stretch_factor
         
-        # Stretch bottom
-        max_stretch_factor = 0.2 # 20% max
-        factor = 1.0 + (stretch_pct / 100.0) * max_stretch_factor
-        new_bottom_h = int(bottom.shape[0] * factor)
+        # Warp map gradient: trên hip_y không đổi, dưới hip_y dãn dần
+        y_coords_1d = np.arange(h, dtype=np.float32)
+        map_y_1d = np.zeros(h, dtype=np.float32)
         
-        bottom_stretched = cv2.resize(bottom, (w, new_bottom_h), interpolation=cv2.INTER_CUBIC)
+        for yi in range(h):
+            if yi <= hip_y:
+                map_y_1d[yi] = float(yi)
+            else:
+                t = min(1.0, (yi - hip_y) / leg_len)
+                smooth_t = t * t * (3 - 2 * t)  # Smooth step
+                map_y_1d[yi] = yi - smooth_t * max_disp
         
-        # Ghép lại
-        res = np.vstack([top, bottom_stretched])
-        return res
+        map_y_2d = np.tile(map_y_1d[:, np.newaxis], (1, w)).astype(np.float32)
+        map_x_2d = np.tile(np.arange(w, dtype=np.float32)[np.newaxis, :], (h, 1))
+        
+        warped = cv2.remap(img, map_x_2d, map_y_2d,
+                           interpolation=cv2.INTER_CUBIC,
+                           borderMode=cv2.BORDER_REFLECT)
+        
+        # ✅ Blend: chỉ áp dụng stretch lên vùng người (phần chân), background giữ nguyên
+        person_mask = self._get_person_mask(img)
+        leg_mask = person_mask.copy()
+        leg_mask[:hip_y, :] = 0  # Phần trên hông không chỉnh
+        leg_mask = cv2.GaussianBlur(leg_mask, (51, 51), 0)
+        
+        mask_3d = np.repeat(leg_mask[:, :, np.newaxis], 3, axis=2)
+        result = (img.astype(np.float32) * (1.0 - mask_3d) + warped.astype(np.float32) * mask_3d).astype(np.uint8)
+        return result
 
     def detect_bodies(self, img: np.ndarray) -> list:
         """
