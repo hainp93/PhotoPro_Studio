@@ -149,6 +149,26 @@ class SettingsPanel(ctk.CTkScrollableFrame):
     def _build_ui(self):
         pad = {"padx": 8, "pady": 3}
 
+        # ── Beauty & Body ─────────────────────────────────────────────
+        self._sec_beauty = SectionFrame(
+            self, title="Làm Đẹp (Body & Skin)", accent="#ff4081", icon="✨"
+        )
+        self._sec_beauty.pack(fill="x", **pad)
+        c = self._sec_beauty.content
+        
+        self._beauty_on = ctk.CTkSwitch(
+            c, text="Bật làm đẹp & nắn dáng",
+            font=("Inter", 12, "bold"), text_color="#ff4081",
+            button_color="#ff4081", button_hover_color="#ff4081",
+            progress_color="#ff4081",
+        )
+        self._beauty_on.pack(anchor="w", pady=(2, 6))
+
+        self._skin_smooth, _ = _labeled_slider(c, "Mịn da", 0, 100, 0, fmt=".0f", accent="#ff4081")
+        self._skin_tone, _ = _labeled_slider(c, "Trắng hồng", 0, 100, 0, fmt=".0f", accent="#ff4081")
+        self._body_slim, _ = _labeled_slider(c, "Thon gọn", 0, 100, 0, fmt=".0f", accent="#ff4081")
+        self._leg_stretch, _ = _labeled_slider(c, "Kéo dài chân", 0, 100, 0, fmt=".0f", accent="#ff4081")
+
         # ── Denoise ───────────────────────────────────────────────────
         self._sec_denoise = SectionFrame(
             self, title="Khử Noise", accent=ACCENT, icon="🔇"
@@ -441,6 +461,11 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         scale_str = self._scale_var.get()
         scale = int(scale_str.replace("x", ""))
         return PipelineSettings(
+            beauty_enabled=bool(self._beauty_on.get()),
+            skin_smooth=float(self._skin_smooth.get()),
+            skin_tone=float(self._skin_tone.get()),
+            body_slim=float(self._body_slim.get()),
+            leg_stretch=float(self._leg_stretch.get()),
             denoise_enabled=bool(self._denoise_on.get()),
             denoise_strength=float(self._denoise_lum.get()),
             denoise_color_strength=float(self._denoise_color.get()),
@@ -467,6 +492,12 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
     def apply_settings(self, s):
         """Load PipelineSettings vào UI."""
+        self._beauty_on.select() if s.beauty_enabled else self._beauty_on.deselect()
+        self._skin_smooth.set(s.skin_smooth)
+        self._skin_tone.set(s.skin_tone)
+        self._body_slim.set(s.body_slim)
+        self._leg_stretch.set(s.leg_stretch)
+        
         self._denoise_on.select() if s.denoise_enabled else self._denoise_on.deselect()
         self._denoise_lum.set(s.denoise_strength)
         self._denoise_color.set(s.denoise_color_strength)

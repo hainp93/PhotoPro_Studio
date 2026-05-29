@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PipelineSettings:
+    # --- Beauty & Body ---
+    beauty_enabled: bool = False
+    skin_smooth: float = 0.0               # 0-100
+    skin_tone: float = 0.0                 # 0-100 (trắng hồng)
+    body_slim: float = 0.0                 # 0-100
+    leg_stretch: float = 0.0               # 0-100
+
     # --- Denoise ---
     denoise_enabled: bool = False          # Tắt mặc định — bật khi cần giảm noise
     denoise_strength: float = 5.0          # 0–20
@@ -85,6 +92,9 @@ class Pipeline:
             elif name == "person_segmenter":
                 from processors.person_segmenter import PersonSegmenter
                 self._processors[name] = PersonSegmenter()
+            elif name == "beauty_processor":
+                from processors.beauty_processor import BeautyProcessor
+                self._processors[name] = BeautyProcessor()
         return self._processors[name]
 
     def process(
@@ -109,6 +119,7 @@ class Pipeline:
 
         result = image.copy()
         steps_total = sum([
+            s.beauty_enabled,
             s.denoise_enabled,
             s.upscale_enabled,
             s.sharpen_enabled,
@@ -122,6 +133,32 @@ class Pipeline:
             pct = (step / max(steps_total, 1)) * 100
             progress_cb(pct, msg)
             step += 1
+
+        # ── Step 0: Beauty & Body Shaping ────────────────────────────
+        if s.beauty_enabled and not cancel_flag.is_set():
+            if s.skin_smooth > 0 or s.skin_tone > 0 or s.body_slim > 0 or s.leg_stretch > 0:
+                _progress("Đang áp dụng Làm đẹp & Nắn dáng...")
+                logger.debug("Pipeline: Beauty & Body Shaping")
+                try:
+                    proc = self._get_processor("beauty_processor")
+                    
+                    # 1. Thon gọn
+                    if s.body_slim > 0:
+                        result = proc.apply_body_slim(result, s.body_slim)
+                    
+                    # 2. Kéo dài chân
+                    if s.leg_stretch > 0:
+                        result = proc.apply_leg_stretch(result, s.leg_stretch)
+                        
+                    # 3. Mịn da / Trắng hồng
+                    if s.skin_smooth > 0 or s.skin_tone > 0:
+                        seg_proc = self._get_processor("person_segmenter")
+                        mask = seg_proc.get_person_mask(result, feather_amount=21)
+                        result = proc.apply_skin_retouch(result, mask, s.skin_smooth, s.skin_tone)
+                except Exception as e:
+                    msg = f"Làm đẹp thất bại: {e}"
+                    logger.warning(msg)
+                    warnings.append(msg)
 
         # ── Step 1: Denoise ──────────────────────────────────────────
         if s.denoise_enabled and not cancel_flag.is_set():
