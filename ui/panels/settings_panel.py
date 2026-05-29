@@ -61,7 +61,7 @@ class SectionFrame(ctk.CTkFrame):
 
         # Content frame
         self._content = ctk.CTkFrame(self, fg_color="transparent")
-        self._content.pack(fill="x", padx=10, pady=(4, 10))
+        self._content.pack(fill="x", padx=8, pady=(2, 6))
 
     def _toggle(self, event=None):
         self._collapsed = not self._collapsed
@@ -69,7 +69,7 @@ class SectionFrame(ctk.CTkFrame):
             self._content.pack_forget()
             self._indicator.configure(text="▸")
         else:
-            self._content.pack(fill="x", padx=10, pady=(4, 10))
+            self._content.pack(fill="x", padx=8, pady=(2, 6))
             self._indicator.configure(text="▾")
 
     @property
@@ -85,19 +85,19 @@ def _labeled_slider(
 ) -> tuple[ctk.CTkSlider, ctk.CTkLabel]:
     """Slider có label + giá trị hiển thị, thiết kế hiện đại."""
     container = ctk.CTkFrame(parent, fg_color="transparent")
-    container.pack(fill="x", pady=(4, 0))
+    container.pack(fill="x", pady=(2, 0))
 
     # Label row
     label_row = ctk.CTkFrame(container, fg_color="transparent")
     label_row.pack(fill="x")
     ctk.CTkLabel(
         label_row, text=label,
-        font=("Inter", 11), text_color=TEXT_SECONDARY, anchor="w",
+        font=("Inter", 12), text_color=TEXT_SECONDARY, anchor="w",
     ).pack(side="left")
     val_label = ctk.CTkLabel(
         label_row,
         text=f"{default:{fmt}}",
-        font=("Inter", 11, "bold"),
+        font=("Inter", 12, "bold"),
         text_color=accent,
         width=42,
         anchor="e",
@@ -144,18 +144,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._build_ui()
 
     def _build_ui(self):
-        pad = {"padx": 8, "pady": 4}
-
-        # Title
-        title_frame = ctk.CTkFrame(self, fg_color="#1a1a35", corner_radius=8)
-        title_frame.pack(fill="x", padx=8, pady=(10, 6))
-        ctk.CTkLabel(
-            title_frame,
-            text="⚙  Cài đặt xử lý",
-            font=("Inter", 13, "bold"),
-            text_color=TEXT_PRIMARY,
-            anchor="w",
-        ).pack(fill="x", padx=10, pady=8)
+        pad = {"padx": 8, "pady": 3}
 
         # ── Denoise ───────────────────────────────────────────────────
         ACCENT_DENOISE = "#3ecf8e"
@@ -167,12 +156,11 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._denoise_on = ctk.CTkSwitch(
             c, text="Bật khử noise",
-            font=("Inter", 11), text_color=TEXT_PRIMARY,
+            font=("Inter", 12), text_color=TEXT_PRIMARY,
             button_color=ACCENT_DENOISE, button_hover_color=ACCENT_DENOISE,
             progress_color=ACCENT_DENOISE,
         )
-        # Mặc định TẮt — chỉ bật khi cần, vì nó làm mờ nhẹ và triệt tiêu hiệu ứng sharpen
-        self._denoise_on.pack(anchor="w", pady=(2, 4))
+        self._denoise_on.pack(anchor="w", pady=(2, 2))
 
         self._denoise_lum, _ = _labeled_slider(
             c, "Luminance", 0, 20, 5.0, fmt=".1f", accent=ACCENT_DENOISE
@@ -248,22 +236,57 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._sharpen_on = ctk.CTkSwitch(
             c, text="Bật làm nét",
-            font=("Inter", 11), text_color=TEXT_PRIMARY,
+            font=("Inter", 12), text_color=TEXT_PRIMARY,
             button_color=ACCENT_SHARPEN, button_hover_color=ACCENT_SHARPEN,
             progress_color=ACCENT_SHARPEN,
         )
         self._sharpen_on.select()
         self._sharpen_on.pack(anchor="w", pady=(2, 4))
 
+        # AI mode toggle
+        ai_row = ctk.CTkFrame(c, fg_color="#1e1a10", corner_radius=6)
+        ai_row.pack(fill="x", pady=(0, 6))
+        self._sharpen_ai_on = ctk.CTkSwitch(
+            ai_row, text="⚡ AI Làm Nét (Real-ESRGAN → resize gốc)",
+            font=("Inter", 11), text_color="#f5a623",
+            button_color="#f5a623", button_hover_color="#e09010",
+            progress_color="#f5a623",
+            command=self._on_sharpen_mode_change,
+        )
+        self._sharpen_ai_on.pack(anchor="w", padx=8, pady=6)
+
+        # Classical controls
+        self._sharpen_classical = ctk.CTkFrame(c, fg_color="transparent")
+        self._sharpen_classical.pack(fill="x")
         self._sharpen_amount, _ = _labeled_slider(
-            c, "Mức độ", 0, 3, 2.5, fmt=".1f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Mức độ", 0, 3, 2.5, fmt=".1f", accent=ACCENT_SHARPEN
         )
         self._sharpen_radius, _ = _labeled_slider(
-            c, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT_SHARPEN
         )
         self._sharpen_thresh, _ = _labeled_slider(
-            c, "Threshold", 0, 15, 3, steps=15, fmt=".0f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Threshold", 0, 15, 3, steps=15, fmt=".0f", accent=ACCENT_SHARPEN
         )
+
+        # AI controls (ẩn mặc định)
+        self._sharpen_ai_frame = ctk.CTkFrame(c, fg_color="transparent")
+        self._sharpen_ai_strength, _ = _labeled_slider(
+            self._sharpen_ai_frame, "Cường độ AI", 0, 1, 0.85, fmt=".2f", accent=ACCENT_SHARPEN
+        )
+        ctk.CTkLabel(
+            self._sharpen_ai_frame, text="Model AI",
+            font=("Inter", 12), text_color=TEXT_SECONDARY, anchor="w",
+        ).pack(fill="x", pady=(4, 1))
+        self._sharpen_ai_model_var = ctk.StringVar(value="realesrgan-x4plus")
+        ctk.CTkOptionMenu(
+            self._sharpen_ai_frame, variable=self._sharpen_ai_model_var,
+            values=["realesrgan-x4plus", "realesrgan-x4plus-anime", "realesrgan-x2plus"],
+            font=("Inter", 11),
+            fg_color="#1e1e3a", button_color=ACCENT_SHARPEN,
+            button_hover_color="#e09010",
+            dropdown_fg_color="#1a1a35",
+            dropdown_text_color=TEXT_PRIMARY,
+        ).pack(fill="x")
 
         # ── Face Restore ─────────────────────────────────────────────
         ACCENT_FACE = "#e668a7"
@@ -367,6 +390,15 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         else:
             self._quality_frame.pack_forget()
 
+    def _on_sharpen_mode_change(self):
+        """Hiện/ẩn classical vs AI sharpen controls."""
+        if self._sharpen_ai_on.get():
+            self._sharpen_classical.pack_forget()
+            self._sharpen_ai_frame.pack(fill="x")
+        else:
+            self._sharpen_ai_frame.pack_forget()
+            self._sharpen_classical.pack(fill="x")
+
     def get_pipeline_settings(self):
         """Trả về PipelineSettings từ trạng thái UI."""
         from core.pipeline import PipelineSettings
@@ -380,6 +412,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             upscale_factor=scale,
             upscale_model=self._model_var.get(),
             sharpen_enabled=bool(self._sharpen_on.get()),
+            sharpen_ai_enabled=bool(self._sharpen_ai_on.get()),
+            sharpen_ai_strength=float(self._sharpen_ai_strength.get()),
+            sharpen_ai_model=self._sharpen_ai_model_var.get(),
             sharpen_amount=float(self._sharpen_amount.get()),
             sharpen_radius=float(self._sharpen_radius.get()),
             sharpen_threshold=int(self._sharpen_thresh.get()),

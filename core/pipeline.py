@@ -26,7 +26,10 @@ class PipelineSettings:
 
     # --- Sharpen ---
     sharpen_enabled: bool = True
-    sharpen_amount: float = 1.0            # 0.0–3.0
+    sharpen_ai_enabled: bool = False       # AI sharpen dùng Real-ESRGAN
+    sharpen_ai_strength: float = 0.85      # blend strength
+    sharpen_ai_model: str = "realesrgan-x4plus"
+    sharpen_amount: float = 2.5            # 0.0–3.0 (classical)
     sharpen_radius: float = 1.0            # pixels
     sharpen_threshold: int = 3             # 0–10
 
@@ -147,20 +150,41 @@ class Pipeline:
 
         # ── Step 3: Sharpen ──────────────────────────────────────────
         if s.sharpen_enabled and not cancel_flag.is_set():
-            _progress("Đang làm nét...")
-            logger.debug("Pipeline: Sharpen")
-            try:
-                proc = self._get_processor("sharpener")
-                result = proc.process(
-                    result,
-                    amount=s.sharpen_amount,
-                    radius=s.sharpen_radius,
-                    threshold=s.sharpen_threshold,
-                )
-            except Exception as e:
-                msg = f"Làm nét thất bại: {e}"
-                logger.warning(msg)
-                warnings.append(msg)
+            proc = self._get_processor("sharpener")
+            if s.sharpen_ai_enabled:
+                _progress("Đang làm nét AI (Real-ESRGAN)...")
+                logger.debug(f"Pipeline: AI Sharpen model={s.sharpen_ai_model}")
+                try:
+                    result = proc.process_ai(
+                        result,
+                        model_name=s.sharpen_ai_model,
+                        tile=s.upscale_tile,
+                        strength=s.sharpen_ai_strength,
+                    )
+                except Exception as e:
+                    logger.warning(f"AI Sharpen thất bại, fallback classical: {e}")
+                    warnings.append(f"AI Sharpen fallback: {e}")
+                    try:
+                        result = proc.process(
+                            result,
+                            amount=s.sharpen_amount,
+                            radius=s.sharpen_radius,
+                            threshold=s.sharpen_threshold,
+                        )
+                    except Exception as e2:
+                        warnings.append(f"Làm nét thất bại: {e2}")
+            else:
+                _progress("Đang làm nét...")
+                logger.debug("Pipeline: Classical Sharpen")
+                try:
+                    result = proc.process(
+                        result,
+                        amount=s.sharpen_amount,
+                        radius=s.sharpen_radius,
+                        threshold=s.sharpen_threshold,
+                    )
+                except Exception as e:
+                    warnings.append(f"Làm nét thất bại: {e}")
 
         # ── Step 4: Face Restore (optional) ─────────────────────────
         if s.face_restore_enabled and not cancel_flag.is_set():
