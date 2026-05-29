@@ -35,6 +35,12 @@ def read_image(path: str) -> np.ndarray:
     # Dùng PIL để đảm bảo đọc được nhiều format (TIFF 16bit, etc.)
     try:
         pil_img = Image.open(path)
+        
+        # ✅ Tự động xoay ảnh theo metadata EXIF Orientation
+        # (ảnh chụp từ điện thoại thường bị lưu ngang nhưng EXIF ghi "xoay 90°")
+        from PIL import ImageOps
+        pil_img = ImageOps.exif_transpose(pil_img)
+        
         # Convert sang RGB nếu cần
         if pil_img.mode in ("RGBA", "LA", "P"):
             pil_img = pil_img.convert("RGB")
