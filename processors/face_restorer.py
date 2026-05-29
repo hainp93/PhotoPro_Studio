@@ -104,10 +104,13 @@ class FaceRestorer:
         checkpoint = torch.load(cf_path, map_location=device)
         net.load_state_dict(checkpoint["params_ema"])
         net.eval()
-        if use_half and device.type == "cuda":
-            net = net.half()
+        
+        # Bỏ net.half() vì code bên trong CodeFormer sinh ra tensor float32
+        # gây lỗi "expected mat1 and mat2 to have the same dtype".
+        # CodeFormer rất nhẹ, chạy float32 vẫn rất nhanh và an toàn.
+        
         self._net = net
-        logger.info("✅ CodeFormer loaded")
+        logger.info("✅ CodeFormer loaded (float32)")
 
         # ── RealESRGAN upsampler (dùng cho cả Face và Background) ───────────────────────────
         try:
@@ -267,8 +270,7 @@ class FaceRestorer:
             norm_fn(face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
             face_t = face_t.unsqueeze(0).to(device)
 
-            if next(self._net.parameters()).dtype == torch.float16:
-                face_t = face_t.half()
+            # Đã bỏ nửa fp16 cho CodeFormer nên không cần cast face_t sang half nữa.
 
             try:
                 with torch.no_grad():
