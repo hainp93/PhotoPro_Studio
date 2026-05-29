@@ -82,7 +82,6 @@ class SectionFrame(ctk.CTkFrame):
 def _labeled_slider(
     parent, label: str, from_: float, to: float,
     default: float, steps: int = 100,
-    default: float, steps: int = 100,
     fmt: str = ".1f",
     accent: str = ACCENT,
 ) -> tuple[ctk.CTkSlider, ctk.CTkLabel]:
