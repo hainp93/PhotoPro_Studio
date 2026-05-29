@@ -24,48 +24,49 @@ class Sharpener:
         threshold: int = 3,
     ) -> np.ndarray:
         """
-        Bilateral Detail Enhancement — không tạo halo, mịn hơn USM.
-        
-        Thuật toán:
-          1. Tách base layer bằng bilateral filter (edge-preserving)
-          2. Detail = original - base
-          3. Sharpened = base + (1 + amount) × detail
-        
-        Ưu điểm so với Unsharp Mask:
-          - Không tạo halo quanh cạnh
-          - Xử lý rìa ảnh tốt (bilateral filter không bị edge artifacts)
-          - Mịn, tự nhiên hơn
+        Luminance-only Bilateral Sharpening — kỹ thuật chuyên nghiệp.
+
+        1. Chuyển sang LAB color space
+        2. Chỉ sharpen kênh L (Luminance = độ sáng/chi tiết)
+        3. Giữ nguyên a, b (màu sắc) → không color shift, không color fringing
+        4. Dùng bilateral filter nhẹ (conservative) — không plasticky
+
+        Ưu điểm:
+          - Không thay đổi màu sắc ảnh
+          - Không tạo halo
+          - Mịn, tự nhiên — đúng cách các tool chuyên nghiệp làm
         """
         if amount <= 0:
             return image
 
-        img_f = image.astype(np.float32)
+        # Chuyển sang LAB — sharpen trên L channel
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        l_ch, a_ch, b_ch = cv2.split(lab)
 
-        # Bilateral filter: edge-preserving, sigma tuned theo amount
-        sigma_color = max(20, int(40 + amount * 10))
-        sigma_space = max(10, int(radius * 20))
-        d = max(5, int(radius * 8) | 1)  # diameter, odd
+        l_f = l_ch.astype(np.float32)
 
-        # Bilateral filter: tách base (smooth nhưng giữ cạnh)
-        base = cv2.bilateralFilter(
-            image,                    # dùng uint8 để bilateral nhanh hơn
-            d=d,
-            sigmaColor=sigma_color,
-            sigmaSpace=sigma_space,
-        ).astype(np.float32)
+        # Bilateral filter trên L — conservative params
+        sigma_color = 20        # chỉ blend pixel rất giống nhau → giữ cạnh sắc
+        sigma_space = max(8, int(radius * 12))
+        d = max(5, int(radius * 6) | 1)
 
-        # Detail layer = high-frequency info
-        detail = img_f - base
+        base = cv2.bilateralFilter(l_ch, d=d,
+                                   sigmaColor=sigma_color,
+                                   sigmaSpace=sigma_space).astype(np.float32)
 
-        # Threshold: bỏ qua noise nhỏ (nhiễu sensor)
+        # Detail layer = high-frequency luminance
+        detail = l_f - base
+
+        # Threshold: bỏ qua noise ISO nhỏ
         if threshold > 0:
-            mask = np.abs(detail) > threshold
-            detail = np.where(mask, detail, 0)
+            detail = np.where(np.abs(detail) > threshold, detail, 0)
 
-        # Boost detail
-        sharpened = base + (1.0 + amount) * detail
+        # Boost (gentle — bilateral đã hiệu quả hơn USM nên amount nhỏ hơn)
+        l_sharp = np.clip(l_f + amount * detail, 0, 255).astype(np.uint8)
 
-        return np.clip(sharpened, 0, 255).astype(np.uint8)
+        # Ghép lại — màu không đổi
+        result_lab = cv2.merge([l_sharp, a_ch, b_ch])
+        return cv2.cvtColor(result_lab, cv2.COLOR_LAB2BGR)
 
     def process_usm(
         self,
@@ -75,30 +76,32 @@ class Sharpener:
         threshold: int = 3,
     ) -> np.ndarray:
         """
-        Unsharp Mask cổ điển (dự phòng).
-        Dùng BORDER_REFLECT để tránh dark artifacts ở rìa ảnh.
+        Unsharp Mask — cũng chỉ sharpen kênh L trong LAB.
+        Dùng BORDER_REFLECT để tránh artifact rìa ảnh.
         """
         if amount <= 0:
             return image
 
-        img_f = image.astype(np.float32)
-        h, w = img_f.shape[:2]
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        l_ch, a_ch, b_ch = cv2.split(lab)
+
+        l_f = l_ch.astype(np.float32)
+        h, w = l_f.shape
         ksize = max(3, int(radius * 6) | 1)
         pad = ksize
 
-        # Padding để tránh rìa ảnh bị tối
         padded = cv2.copyMakeBorder(
-            img_f, pad, pad, pad, pad, cv2.BORDER_REFLECT_101
+            l_f, pad, pad, pad, pad, cv2.BORDER_REFLECT_101
         )
-        blurred_padded = cv2.GaussianBlur(padded, (ksize, ksize), radius)
-        blurred = blurred_padded[pad:pad+h, pad:pad+w]
+        blurred = cv2.GaussianBlur(padded, (ksize, ksize), radius)[pad:pad+h, pad:pad+w]
 
-        detail = img_f - blurred
+        detail = l_f - blurred
         if threshold > 0:
-            mask = np.abs(detail) > threshold
-            detail = np.where(mask, detail, 0)
+            detail = np.where(np.abs(detail) > threshold, detail, 0)
 
-        return np.clip(img_f + amount * detail, 0, 255).astype(np.uint8)
+        l_sharp = np.clip(l_f + amount * detail, 0, 255).astype(np.uint8)
+        result_lab = cv2.merge([l_sharp, a_ch, b_ch])
+        return cv2.cvtColor(result_lab, cv2.COLOR_LAB2BGR)
 
     def process_wavelet(
         self,

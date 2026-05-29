@@ -30,7 +30,7 @@ class PipelineSettings:
     sharpen_ai_strength: float = 0.85      # blend strength
     sharpen_ai_model: str = "realesrgan-x4plus"
     sharpen_method: str = "Bilateral"      # "Bilateral" | "USM"
-    sharpen_amount: float = 1.5            # 0.0–3.0
+    sharpen_amount: float = 1.0            # 0.0–2.0 (LAB bilateral hiệu quả hơn)
     sharpen_radius: float = 1.0            # pixels
     sharpen_threshold: int = 3             # 0–10
 
