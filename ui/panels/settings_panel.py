@@ -351,7 +351,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._face_high_res.pack(anchor="w", pady=(0, 6))
 
         self._face_fidelity, _ = _labeled_slider(
-            c, "Fidelity (0=AI, 1=Original)", 0, 1, 0.5,
+            c, "Fidelity (0=AI, 1=Original)", 0, 1, 0.8,
             fmt=".2f", accent=ACCENT,
         )
 
