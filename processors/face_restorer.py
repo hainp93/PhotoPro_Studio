@@ -158,7 +158,7 @@ class FaceRestorer:
             device=device,
         )
         # Override model paths nếu có local weights
-        if det_path:
+        if det_path and hasattr(helper, 'face_det') and helper.face_det is not None:
             helper.face_det.model_path = det_path
         if parse_path and hasattr(helper, 'face_parse') and helper.face_parse is not None:
             pass  # FaceRestoreHelper tự quản lý path parsing
