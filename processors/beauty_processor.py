@@ -90,11 +90,20 @@ class BeautyProcessor:
 
     def apply_body_slim(self, img: np.ndarray, strength: float) -> np.ndarray:
         """
-        Thon gọn cơ thể và khuôn mặt.
-        strength: 0-100
+        Thon gọn bằng cách nén nhẹ chiều ngang của ảnh.
+        Không dùng AI segmentation → không artifact, không ghost.
+        strength: 0-100 (100 = nén 10% chiều rộng)
         """
-        if strength <= 0 or YOLO is None:
+        if strength <= 0:
             return img
+        h, w = img.shape[:2]
+        slim_factor = (strength / 100.0) * 0.10   # max 10% nén ngang
+        new_w = max(1, int(round(w * (1.0 - slim_factor))))
+        if new_w >= w:
+            return img
+        logger.debug(f"Body slim: {w}x{h} → {new_w}x{h} ({slim_factor*100:.1f}% nén)")
+        return cv2.resize(img, (new_w, h), interpolation=cv2.INTER_LANCZOS4)
+
             
         self._load_pose_model()
         if self.pose_model is None:
@@ -221,12 +230,20 @@ class BeautyProcessor:
 
     def apply_leg_stretch(self, img: np.ndarray, stretch_pct: float) -> np.ndarray:
         """
-        Kéo dài chân bằng warp gradient.
-        Chỉ dãn vùng từ hông xuống. Background giữ nguyên nhờ blend person mask.
-        stretch_pct: 0-100 (100 = giãn 15%)
+        Kéo dài chân bằng cách kéo dãn nhẹ chiều dọc của ảnh.
+        Không dùng AI segmentation → không artifact.
+        stretch_pct: 0-100 (100 = kéo dài 12% chiều cao)
         """
-        if stretch_pct <= 0 or YOLO is None:
+        if stretch_pct <= 0:
             return img
+        h, w = img.shape[:2]
+        stretch_factor = (stretch_pct / 100.0) * 0.12   # max 12% kéo dọc
+        new_h = int(round(h * (1.0 + stretch_factor)))
+        if new_h <= h:
+            return img
+        logger.debug(f"Leg stretch: {w}x{h} → {w}x{new_h} ({stretch_factor*100:.1f}% kéo dọc)")
+        return cv2.resize(img, (w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
             
         self._load_pose_model()
         if self.pose_model is None:
