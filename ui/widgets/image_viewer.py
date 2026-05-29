@@ -35,8 +35,7 @@ class ImageViewer(ctk.CTkFrame):
         self._pan_x = 0
         self._pan_y = 0
         self._drag_start = None
-        self._space_down = False  # Giữ Space để kéo ảnh (giống Photoshop)
-        self._space_pan_start = None  # Lưu điểm bắt đầu pan khi giữ Space
+        self._mid_drag_start = None  # Middle mouse button drag for pan
 
         # Split divider (0.0 - 1.0)
         self._split_pos = 0.5
@@ -82,9 +81,10 @@ class ImageViewer(ctk.CTkFrame):
         # Hover info
         self._canvas.bind("<Motion>", self._on_mouse_move)
         
-        # Space key pan (Photoshop style) — bind_all trên tk.Canvas (không bị CTk chặn)
-        self._canvas.bind_all("<KeyPress-space>", self._on_space_press)
-        self._canvas.bind_all("<KeyRelease-space>", self._on_space_release)
+        # Middle mouse button (Button-2) để pan - không cần keyboard focus, không xung đột
+        self._canvas.bind("<ButtonPress-2>", self._on_mid_press)
+        self._canvas.bind("<B2-Motion>", self._on_mid_drag)
+        self._canvas.bind("<ButtonRelease-2>", self._on_mid_release)
 
     def _build_toolbar(self):
         self._toolbar = ctk.CTkFrame(
@@ -425,11 +425,6 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_press(self, event):
-        # Space + drag = pan mode (Photoshop style), ưu tiên cao nhất
-        if self._space_down:
-            self._space_pan_start = (event.x - self._pan_x, event.y - self._pan_y)
-            return
-        
         if self._interactive_face_mode:
             # Vẽ hình chữ nhật mới
             self._drawing_box_start = (event.x, event.y)
@@ -462,13 +457,6 @@ class ImageViewer(ctk.CTkFrame):
             self._dragging_split = False
 
     def _on_drag(self, event):
-        # Space + drag = pan mọi lúc
-        if self._space_down and self._space_pan_start:
-            self._pan_x = event.x - self._space_pan_start[0]
-            self._pan_y = event.y - self._space_pan_start[1]
-            self._redraw()
-            return
-        
         if self._interactive_face_mode and self._drawing_box_start:
             if self._temp_box_id:
                 self._canvas.delete(self._temp_box_id)
@@ -513,18 +501,24 @@ class ImageViewer(ctk.CTkFrame):
             return
 
         self._drag_start = None
-        self._space_pan_start = None
         self._dragging_split = False
 
-    def _on_space_press(self, event):
-        if not self._space_down:
-            self._space_down = True
-            self._canvas.configure(cursor="fleur")  # Con trỏ bàn tay mở
+    def _on_mid_press(self, event):
+        """Middle mouse button press — bắt đầu pan."""
+        self._mid_drag_start = (event.x - self._pan_x, event.y - self._pan_y)
+        self._canvas.configure(cursor="fleur")
 
-    def _on_space_release(self, event):
-        self._space_down = False
-        self._space_pan_start = None
-        # Khôi phục con trỏ
+    def _on_mid_drag(self, event):
+        """Middle mouse drag — pan ảnh."""
+        if self._mid_drag_start:
+            self._pan_x = event.x - self._mid_drag_start[0]
+            self._pan_y = event.y - self._mid_drag_start[1]
+            self._redraw()
+
+    def _on_mid_release(self, event):
+        """Middle mouse release — kết thúc pan."""
+        self._mid_drag_start = None
+        # Khôi phục cursor
         if self._interactive_face_mode:
             self._canvas.configure(cursor="crosshair")
         elif self._interactive_body_mode:
@@ -536,9 +530,6 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_mouse_move(self, event):
-        if self._space_down:
-            self._canvas.configure(cursor="fleur")
-            return
         if self._interactive_face_mode:
             self._canvas.configure(cursor="crosshair")
             return

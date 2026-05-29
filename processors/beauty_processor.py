@@ -241,24 +241,24 @@ class BeautyProcessor:
         leg_mask = person_mask.copy()
         leg_mask[:hip_y, :] = 0  # Phần trên hông không chỉnh
         
-        # Mở rộng mask xuống dưới bàn chân: dùng bbox y2 + padding
+        # Mở rộng mask xuống dưới bàn chân: fill 1.0 trong bbox từ hông đến gầm giày
+        # (anchor_vals = 0 tại by2 nên cách cũ không hiệu quả)
         if len(results) > 0 and results[0].boxes is not None:
             boxes_np = results[0].boxes.xyxy.cpu().numpy()
             for box in boxes_np:
                 bx1, by1, bx2, by2 = [int(v) for v in box]
-                feet_padding = int(h * 0.05)  # 5% chiều cao ảnh
-                foot_bottom = min(h, by2 + feet_padding)
+                if by2 <= hip_y:
+                    continue
                 col_s = max(0, bx1)
                 col_e = min(w, bx2)
-                if by2 > hip_y and col_e > col_s:
-                    anchor_row = min(by2, h - 1)
-                    anchor_vals = leg_mask[anchor_row, col_s:col_e].copy()
-                    for yi in range(anchor_row, foot_bottom):
-                        t = (yi - anchor_row) / max(1, feet_padding)
-                        leg_mask[yi, col_s:col_e] = np.maximum(
-                            leg_mask[yi, col_s:col_e],
-                            anchor_vals * (1.0 - t * t)
-                        )
+                row_start = max(hip_y, by1)
+                # Mở rộng xuống thêm 5% để phủ hết bàn chân
+                row_end = min(h, by2 + int(h * 0.05))
+                if col_e > col_s and row_end > row_start:
+                    # Fill 1.0 toàn bbox: Gaussian blur sẽ tạo viền mịn tự nhiên
+                    leg_mask[row_start:row_end, col_s:col_e] = np.maximum(
+                        leg_mask[row_start:row_end, col_s:col_e], 1.0
+                    )
         leg_mask = np.clip(leg_mask, 0, 1)
         
         leg_mask = cv2.GaussianBlur(leg_mask, (51, 51), 0)
