@@ -63,8 +63,12 @@ check("GPU FP16", check_fp16)
 # OpenCV
 check("OpenCV", lambda: __import__("cv2").__version__)
 
-# basicsr
-check("basicsr", lambda: __import__("basicsr").__version__ if hasattr(__import__("basicsr"), "__version__") else "installed")
+# basicsr — kiểm tra functional thay vì version (bundled trong CodeFormer_repo không có version)
+def check_basicsr():
+    from basicsr.utils.registry import ARCH_REGISTRY
+    from basicsr.utils import img2tensor, tensor2img
+    return "basicsr functional OK (img2tensor, ARCH_REGISTRY)"
+check("basicsr", check_basicsr)
 
 # realesrgan_utils (từ basicsr)
 def check_esrgan():
