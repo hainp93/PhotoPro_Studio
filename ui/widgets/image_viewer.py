@@ -145,11 +145,14 @@ class ImageViewer(ctk.CTkFrame):
         self._btn_split.configure(text="Split ◧", fg_color="#23355a", text_color="#7ab3f7")
         self._redraw()
 
-    def set_after(self, image: np.ndarray | None):
+    def set_after(self, image):
         self._after_img = image
         if image is not None:
-            # Tắt chế độ vẽ box khi có ảnh after
+            # Tắt các chế độ tương tác khi có ảnh after
             self._interactive_face_mode = False
+            self._interactive_body_mode = False
+            self._ai_body_bboxes = []
+            self._excluded_body_indices = set()
             # Chuyển sang Split mode để so sánh trước/sau
             self._split_mode = True
             self._split_pos = 0.5
@@ -445,7 +448,7 @@ class ImageViewer(ctk.CTkFrame):
                             self._excluded_body_indices.add(i)
                         self._redraw()
                         return
-            return
+            # Nếu click ngoài bbox — không return, cho phép fall-through đến split/pan
 
         # Check nếu click gần divider — vùng bắt rộng 20px
         cw = self._canvas.winfo_width()
