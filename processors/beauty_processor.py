@@ -18,7 +18,8 @@ class BeautyProcessor:
         if self.pose_model is None and YOLO is not None:
             logger.info("Loading YOLOv8-pose model for BeautyProcessor...")
             try:
-                self.pose_model = YOLO("yolov8n-pose.pt")
+                # Dùng yolov8s-pose.pt (Small) - chính xác hơn yolov8n (Nano)
+                self.pose_model = YOLO("yolov8s-pose.pt")
                 self.pose_model.to(self._device)
             except Exception as e:
                 logger.error(f"Failed to load YOLOv8-pose: {e}")
@@ -238,4 +239,6 @@ class BeautyProcessor:
             for box in boxes:
                 x1, y1, x2, y2 = box
                 bboxes.append([int(x1), int(y1), int(x2), int(y2)])
+        
+        logger.info(f"YOLO detect_bodies: ảnh {img.shape[1]}x{img.shape[0]} -> tìm thấy {len(bboxes)} người")
         return bboxes
