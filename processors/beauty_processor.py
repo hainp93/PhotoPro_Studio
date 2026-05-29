@@ -79,7 +79,7 @@ class BeautyProcessor:
 
     def apply_body_slim(self, img: np.ndarray, strength: float) -> np.ndarray:
         """
-        Thon gọn bằng Pincushion distortion hướng về giữa các người.
+        Thon gọn cơ thể và khuôn mặt.
         strength: 0-100
         """
         if strength <= 0 or YOLO is None:
@@ -91,45 +91,74 @@ class BeautyProcessor:
 
         # Nhận diện để lấy vị trí center của người
         results = self.pose_model(img, verbose=False)
-        centers = []
-        if len(results) > 0 and results[0].boxes is not None and len(results[0].boxes) > 0:
-            boxes = results[0].boxes.xyxy.cpu().numpy()
-            for box in boxes:
-                x1, y1, x2, y2 = box
-                cx = (x1 + x2) / 2
-                cy = (y1 + y2) / 2
-                h = y2 - y1
-                centers.append((cx, cy, h))
+        bodies = []
+        faces = []
+        
+        if len(results) > 0:
+            if results[0].boxes is not None and len(results[0].boxes) > 0:
+                boxes = results[0].boxes.xyxy.cpu().numpy()
+                for box in boxes:
+                    x1, y1, x2, y2 = box
+                    cx = (x1 + x2) / 2
+                    cy = (y1 + y2) / 2
+                    h = y2 - y1
+                    bodies.append((cx, cy, h))
+                    
+            if results[0].keypoints is not None:
+                kpts = results[0].keypoints.xy.cpu().numpy()
+                for p in kpts:
+                    if len(p) >= 5:
+                        nose = p[0]
+                        l_ear = p[3]
+                        r_ear = p[4]
+                        if nose[1] > 0 and l_ear[1] > 0 and r_ear[1] > 0:
+                            # Tính độ rộng khuôn mặt dựa trên khoảng cách 2 tai
+                            face_w = abs(l_ear[0] - r_ear[0]) * 1.5 
+                            if face_w > 10:
+                                faces.append((nose[0], nose[1], face_w))
                 
-        if not centers:
+        if not bodies and not faces:
             return img
             
-        # Squeeze logic
-        res = img.copy()
-        for cx, cy, h_box in centers:
-            # radius cho warp ngang = 1/2 chiều cao người
-            radius = h_box * 0.5 
-            slim_factor = (strength / 100.0) * 0.3 # max 0.3 warp
-            
-            h, w = res.shape[:2]
-            y_coords, x_coords = np.mgrid[0:h, 0:w]
+        # Tối ưu hóa: Tạo grid 1 lần và tích lũy độ dời (displacement)
+        h, w = img.shape[:2]
+        y_coords, x_coords = np.mgrid[0:h, 0:w]
+        map_x = x_coords.astype(np.float32).copy()
+        map_y = y_coords.astype(np.float32).copy()
+        
+        # 1. Thon gọn mặt (Face Slimming)
+        for cx, cy, f_width in faces:
+            radius = f_width * 0.8
+            slim_factor = (strength / 100.0) * 0.25 # max 25% squeeze for face
             
             dx = x_coords - cx
             dy = y_coords - cy
             dist = np.sqrt(dx**2 + dy**2)
             
-            # Tạo vùng ảnh hưởng (chỉ bóp ngang, nhưng falloff theo hình tròn)
             roi_mask = dist < radius
-            
             factor = np.zeros_like(dist, dtype=np.float32)
             factor[roi_mask] = (1 - (dist[roi_mask] / radius)) ** 2
             
-            # Tính toán tọa độ kéo về tâm (để bóp thì map_x trỏ ra xa tâm)
-            map_x = x_coords + dx * slim_factor * factor
-            map_y = y_coords.astype(np.float32)
+            map_x += dx * slim_factor * factor
             
-            res = cv2.remap(res, map_x.astype(np.float32), map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        # 2. Thon gọn cơ thể (Body Slimming)
+        for cx, cy, h_box in bodies:
+            radius = h_box * 0.5 
+            # Tăng độ móp body lên 0.6 (trước đó là 0.3 hơi nhẹ)
+            slim_factor = (strength / 100.0) * 0.6 
             
+            dx = x_coords - cx
+            dy = y_coords - cy
+            dist = np.sqrt(dx**2 + dy**2)
+            
+            roi_mask = dist < radius
+            factor = np.zeros_like(dist, dtype=np.float32)
+            factor[roi_mask] = (1 - (dist[roi_mask] / radius)) ** 2
+            
+            map_x += dx * slim_factor * factor
+            
+        # Thực hiện warp 1 lần duy nhất cho toàn bộ ảnh
+        res = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
         return res
 
     def apply_leg_stretch(self, img: np.ndarray, stretch_pct: float) -> np.ndarray:
