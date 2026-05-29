@@ -1,7 +1,17 @@
 """
-Face Restorer — CodeFormer / GFPGAN face restoration.
-TẮT mặc định — chỉ bật khi ảnh hỏng mặt nặng.
-Fidelity weight điều chỉnh mức độ AI tác động vào khuôn mặt.
+Face Restorer — CodeFormer face restoration.
+Pipeline giống hệt Wedding Beauty Studio V9.5:
+  1. Detect faces (RetinaFace resnet50)
+  2. Crop & align mỗi mặt → 512×512
+  3. CodeFormer restore với fidelity weight
+  4. Optional: RealESRGAN x2 upscale background
+  5. Paste restored faces vào background
+
+Cần model weights (copy từ Wedding app hoặc download):
+  weights/CodeFormer/codeformer.pth
+  weights/realesrgan/RealESRGAN_x2plus.pth
+  weights/facelib/detection_Resnet50_Final.pth
+  weights/facelib/parsing_parsenet.pth
 """
 import cv2
 import numpy as np
@@ -13,63 +23,112 @@ logger = logging.getLogger(__name__)
 
 WEIGHTS_DIR = Path(__file__).parent.parent / "weights"
 
-MODEL_URLS = {
-    "codeformer": {
-        "url": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
-        "filename": "codeformer.pth",
-        "dir": "CodeFormer",
-    },
-    "gfpgan": {
-        "url": "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth",
-        "filename": "GFPGANv1.3.pth",
-        "dir": "GFPGAN",
-    },
-}
+# Fallback: lấy weights từ Wedding Beauty Studio nếu có
+WEDDING_WEIGHTS = Path(
+    r"f:\Setup\Wedding Beauty Studio V9.5\Wedding Beauty Studio V9.5\VGA\weights"
+)
+
+
+def _resolve_weight(subdir: str, filename: str) -> str | None:
+    """Tìm file weight: PhotoPro weights/ → Wedding app → None."""
+    local = WEIGHTS_DIR / subdir / filename
+    if local.exists():
+        return str(local)
+    wedding = WEDDING_WEIGHTS / subdir / filename
+    if wedding.exists():
+        logger.info(f"Dùng weights từ Wedding app: {wedding}")
+        return str(wedding)
+    return None
 
 
 class FaceRestorer:
     """
-    Phục hồi khuôn mặt AI.
-    - CodeFormer: tốt nhất, có fidelity weight
-    - GFPGAN: nhanh hơn, nhẹ hơn
+    Phục hồi khuôn mặt bằng CodeFormer + RealESRGAN background.
+    Pipeline giống Wedding Beauty Studio.
     """
 
     def __init__(self):
         self._net = None
-        self._face_helper = None
-        self._loaded_model = ""
+        self._bg_upsampler = None
+        self._loaded = False
 
-    def _load_codeformer(self):
-        from basicsr.utils.download_util import load_file_from_url
+    def _load(self, use_bg_upscale: bool = True):
+        """Load CodeFormer + (optional) RealESRGAN background upsampler."""
         from basicsr.utils.registry import ARCH_REGISTRY
-        from core.gpu_detector import get_gpu_info
 
-        gpu = get_gpu_info()
-        device = gpu.get_torch_device()
-        cfg = MODEL_URLS["codeformer"]
-        weight_dir = WEIGHTS_DIR / cfg["dir"]
-        weight_dir.mkdir(parents=True, exist_ok=True)
-
-        ckpt_path = load_file_from_url(
-            cfg["url"], model_dir=str(weight_dir), progress=True
+        # ── Device ────────────────────────────────────────────────────
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        use_half = (
+            torch.cuda.is_available()
+            and not any(
+                tag in torch.cuda.get_device_name(0)
+                for tag in ["1650", "1660"]
+            )
         )
+        logger.info(f"FaceRestorer: device={device} fp16={use_half}")
+
+        # ── CodeFormer ────────────────────────────────────────────────
+        cf_path = _resolve_weight("CodeFormer", "codeformer.pth")
+        if not cf_path:
+            raise FileNotFoundError(
+                "codeformer.pth không tìm thấy. "
+                "Chạy: python scripts/setup_models.py"
+            )
 
         net = ARCH_REGISTRY.get("CodeFormer")(
-            dim_embd=512, codebook_size=1024, n_head=8, n_layers=9,
+            dim_embd=512, codebook_size=1024,
+            n_head=8, n_layers=9,
             connect_list=["32", "64", "128", "256"],
         ).to(device)
-        checkpoint = torch.load(ckpt_path, map_location=device)
+
+        checkpoint = torch.load(cf_path, map_location=device)
         net.load_state_dict(checkpoint["params_ema"])
         net.eval()
-
+        if use_half and device.type == "cuda":
+            net = net.half()
         self._net = net
-        logger.info("CodeFormer loaded.")
+        logger.info("✅ CodeFormer loaded")
 
-    def _get_face_helper(self, upscale: int = 1):
+        # ── RealESRGAN background upsampler ───────────────────────────
+        if use_bg_upscale:
+            try:
+                from basicsr.archs.rrdbnet_arch import RRDBNet
+                from basicsr.utils.realesrgan_utils import RealESRGANer
+
+                esrgan_path = _resolve_weight("realesrgan", "RealESRGAN_x2plus.pth")
+                if not esrgan_path:
+                    raise FileNotFoundError("RealESRGAN_x2plus.pth không tìm thấy")
+
+                bg_model = RRDBNet(
+                    num_in_ch=3, num_out_ch=3, num_feat=64,
+                    num_block=23, num_grow_ch=32, scale=2,
+                )
+                self._bg_upsampler = RealESRGANer(
+                    scale=2,
+                    model_path=esrgan_path,
+                    model=bg_model,
+                    tile=0,           # 0 = no tile, dùng toàn VRAM (OK với RTX 5090 16GB)
+                    tile_pad=40,
+                    pre_pad=0,
+                    half=use_half,
+                    device=device,
+                )
+                logger.info("✅ RealESRGAN x2 background upsampler loaded")
+            except Exception as e:
+                logger.warning(f"RealESRGAN không load được: {e}. Bỏ qua background upscale.")
+                self._bg_upsampler = None
+
+        self._loaded = True
+
+    def _get_face_helper(self, upscale: int, device):
+        """Tạo FaceRestoreHelper với detection + parsing models."""
         from facelib.utils.face_restoration_helper import FaceRestoreHelper
-        from core.gpu_detector import get_device
-        device = get_device()
-        return FaceRestoreHelper(
+
+        # Override model path để dùng local weights thay vì download
+        det_path = _resolve_weight("facelib", "detection_Resnet50_Final.pth")
+        parse_path = _resolve_weight("facelib", "parsing_parsenet.pth")
+
+        helper = FaceRestoreHelper(
             upscale_factor=upscale,
             face_size=512,
             crop_ratio=(1, 1),
@@ -78,6 +137,13 @@ class FaceRestorer:
             use_parse=True,
             device=device,
         )
+        # Override model paths nếu có local weights
+        if det_path:
+            helper.face_det.model_path = det_path
+        if parse_path and hasattr(helper, 'face_parse') and helper.face_parse is not None:
+            pass  # FaceRestoreHelper tự quản lý path parsing
+
+        return helper
 
     def process(
         self,
@@ -85,64 +151,97 @@ class FaceRestorer:
         fidelity: float = 0.5,
         model_name: str = "codeformer",
         upsample: bool = True,
+        bg_upscale: bool = True,
     ) -> np.ndarray:
         """
-        image   : BGR uint8
-        fidelity: 0.0 (AI hoàn toàn) → 1.0 (giữ nguyên nhất có thể)
+        image    : BGR uint8
+        fidelity : 0.0 = AI hoàn toàn | 1.0 = giữ nguyên gốc
+        upsample : upscale khuôn mặt 2x sau khi restore
+        bg_upscale: dùng RealESRGAN để upscale background
+
+        Pipeline giống Wedding Beauty Studio.
         """
-        from core.gpu_detector import get_device
-        from torchvision.transforms.functional import normalize
+        from torchvision.transforms.functional import normalize as norm_fn
         from basicsr.utils import img2tensor, tensor2img
         from facelib.utils.misc import is_gray
 
-        device = get_device()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if self._loaded_model != model_name or self._net is None:
-            self._load_codeformer()
-            self._loaded_model = model_name
+        if not self._loaded:
+            self._load(use_bg_upscale=bg_upscale)
 
-        face_helper = self._get_face_helper(upscale=2 if upsample else 1)
+        face_helper = self._get_face_helper(upscale=2 if upsample else 1, device=device)
         face_helper.clean_all()
         face_helper.read_image(image)
 
         num_faces = face_helper.get_face_landmarks_5(
             only_center_face=False, resize=640, eye_dist_threshold=5
         )
-        logger.debug(f"FaceRestorer: detected {num_faces} faces")
+        logger.info(f"FaceRestorer: phát hiện {num_faces} khuôn mặt")
 
         if num_faces == 0:
-            logger.info("No faces detected, skipping face restoration.")
+            logger.info("Không có mặt → bỏ qua face restore")
+            if self._bg_upsampler and bg_upscale:
+                # Chỉ upscale background nếu không có mặt
+                rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                bg, _ = self._bg_upsampler.enhance(rgb, outscale=2)
+                return cv2.cvtColor(bg, cv2.COLOR_RGB2BGR)
             return image
 
         face_helper.align_warp_face()
 
-        # Restore mỗi mặt
+        # ── Restore mỗi khuôn mặt ────────────────────────────────────
         for cropped_face in face_helper.cropped_faces:
             face_t = img2tensor(cropped_face / 255.0, bgr2rgb=True, float32=True)
-            normalize(face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+            norm_fn(face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
             face_t = face_t.unsqueeze(0).to(device)
+
+            if next(self._net.parameters()).dtype == torch.float16:
+                face_t = face_t.half()
 
             try:
                 with torch.no_grad():
                     output = self._net(face_t, w=fidelity, adain=True)[0]
-                    restored_face = tensor2img(output, rgb2bgr=True, min_max=(-1, 1))
+                    restored = tensor2img(output, rgb2bgr=True, min_max=(-1, 1))
                 del output
                 torch.cuda.empty_cache()
             except Exception as e:
-                logger.error(f"CodeFormer inference failed: {e}")
-                restored_face = tensor2img(face_t, rgb2bgr=True, min_max=(-1, 1))
+                logger.error(f"CodeFormer inference lỗi: {e}")
+                restored = tensor2img(face_t.float(), rgb2bgr=True, min_max=(-1, 1))
 
-            restored_face = restored_face.astype("uint8")
-            face_helper.add_restored_face(restored_face, cropped_face)
+            face_helper.add_restored_face(restored.astype("uint8"), cropped_face)
 
-        # Paste back
+        # ── Upscale background + paste faces ─────────────────────────
         face_helper.get_inverse_affine(None)
-        result = face_helper.paste_faces_to_input_image()
+
+        if self._bg_upsampler and bg_upscale:
+            logger.info("RealESRGAN: upscaling background 2x...")
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            bg_rgb, _ = self._bg_upsampler.enhance(rgb, outscale=2)
+            bg_img = cv2.cvtColor(bg_rgb, cv2.COLOR_RGB2BGR)
+        else:
+            bg_img = None
+
+        # Paste restored faces vào background
+        if upsample and self._bg_upsampler:
+            result = face_helper.paste_faces_to_input_image(
+                upsample_img=bg_img,
+                draw_box=False,
+                face_upsampler=self._bg_upsampler,
+            )
+        else:
+            result = face_helper.paste_faces_to_input_image(
+                upsample_img=bg_img,
+                draw_box=False,
+            )
+
+        logger.info("✅ Face restore hoàn thành")
         return result
 
     def unload(self):
         self._net = None
-        self._face_helper = None
-        self._loaded_model = ""
-        torch.cuda.empty_cache()
+        self._bg_upsampler = None
+        self._loaded = False
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         logger.info("FaceRestorer unloaded.")
