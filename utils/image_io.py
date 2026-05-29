@@ -90,23 +90,29 @@ def save_image(
 
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    # Convert BGR → RGB cho PIL
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(rgb)
-
-    save_kwargs = {}
     if fmt in ("JPEG", "JPG"):
-        save_kwargs = {"quality": quality, "optimize": True, "progressive": True}
-        pil_img.save(str(p), format="JPEG", **save_kwargs)
-    elif fmt == "WEBP":
-        save_kwargs = {"quality": quality, "method": 4}
-        pil_img.save(str(p), format="WEBP", **save_kwargs)
-    elif fmt == "TIFF":
-        pil_img.save(str(p), format="TIFF", compression="lzw")
+        # cv2 viết JPEG tuần tự — không load toàn bộ vào RAM
+        params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+        success = cv2.imwrite(str(p), image, params)
+        if not success:
+            raise IOError(f"Không thể lưu JPEG: {p}")
     elif fmt == "PNG":
-        pil_img.save(str(p), format="PNG", optimize=True)
+        # cv2 viết PNG tốt hơn PIL cho ảnh lớn (không cần optimize pass thứ 2)
+        params = [cv2.IMWRITE_PNG_COMPRESSION, 1]  # 0=không nén, 9=nén tối đa; 1=nhanh
+        success = cv2.imwrite(str(p), image, params)
+        if not success:
+            raise IOError(f"Không thể lưu PNG: {p}")
+    elif fmt == "WEBP":
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(rgb)
+        pil_img.save(str(p), format="WEBP", quality=quality, method=4)
+    elif fmt == "TIFF":
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(rgb)
+        pil_img.save(str(p), format="TIFF", compression="lzw")
     else:
-        pil_img.save(str(p))
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        Image.fromarray(rgb).save(str(p))
 
     logger.info(f"Saved: {p} ({fmt})")
     return str(p)
