@@ -78,6 +78,7 @@ class PhotoProApp(ctk.CTk):
         y = (sh - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.minsize(1000, 650)
+        self.after(0, lambda: self.state("zoomed"))  # mặc định full màn hình
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Icon nếu có
