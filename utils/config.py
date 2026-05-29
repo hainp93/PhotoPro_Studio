@@ -37,7 +37,7 @@ class AppConfig:
     denoise_strength: float = 5.0
     denoise_color_strength: float = 5.0
 
-    upscale_enabled: bool = True
+    upscale_enabled: bool = False   # Tắt mặc định — cần cài basicsr+realesrgan
     upscale_factor: int = 2
     upscale_model: str = "realesrgan-x4plus"
 
