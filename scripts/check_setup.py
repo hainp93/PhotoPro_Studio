@@ -8,6 +8,17 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 WEIGHTS = ROOT / "weights"
 
+# ── Thêm CodeFormer_repo vào sys.path TRƯỚC mọi import ──────────────────
+# basicsr, facelib đều nằm trong CodeFormer_repo — không cần pip install
+_CF_REPO = ROOT / "CodeFormer_repo"
+if _CF_REPO.exists():
+    if str(_CF_REPO) not in sys.path:
+        sys.path.insert(0, str(_CF_REPO))
+    print(f"[INFO] sys.path += {_CF_REPO.name}")
+else:
+    print(f"[WARN] CodeFormer_repo not found at {_CF_REPO}")
+    print("       Run: git clone https://github.com/sczhou/CodeFormer.git CodeFormer_repo")
+
 OK = "[OK]"
 FAIL = "[FAIL]"
 WARN = "[WARN]"
@@ -75,10 +86,11 @@ check("facelib", check_facelib)
 # CodeFormer arch
 def check_codeformer():
     from basicsr.utils.registry import ARCH_REGISTRY
-    cf = ARCH_REGISTRY.get("CodeFormer")
+    cf = ARCH_REGISTRY.get("CodeFormer") or ARCH_REGISTRY.get("CodeFormer_basicsr")
     if cf is None:
-        raise ImportError("CodeFormer not in ARCH_REGISTRY — clone & install CodeFormer repo")
-    return "ARCH_REGISTRY['CodeFormer'] found"
+        raise ImportError("CodeFormer not in ARCH_REGISTRY — check CodeFormer_repo clone")
+    name = "CodeFormer" if ARCH_REGISTRY.get("CodeFormer") else "CodeFormer_basicsr"
+    return f"ARCH_REGISTRY['{name}'] found"
 check("CodeFormer arch", check_codeformer)
 
 # Model weights

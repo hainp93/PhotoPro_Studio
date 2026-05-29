@@ -17,6 +17,17 @@ else:
 # Thêm thư mục gốc vào path
 sys.path.insert(0, str(BASE_DIR))
 
+# ── CodeFormer repo — thêm vào sys.path để import basicsr, facelib, CodeFormer ──
+# Tương thích Python 3.12 (pip install basicsr/facelib không hỗ trợ)
+_CF_REPO = BASE_DIR / "CodeFormer_repo"
+if _CF_REPO.exists():
+    if str(_CF_REPO) not in sys.path:
+        sys.path.insert(0, str(_CF_REPO))
+    # basicsr bên trong CodeFormer_repo
+    _CF_BASICSR = _CF_REPO / "basicsr"
+    if _CF_BASICSR.exists() and str(_CF_REPO) not in sys.path:
+        sys.path.insert(0, str(_CF_REPO))
+
 # ── Logging setup ─────────────────────────────────────────────────────────────
 LOG_FILE = APP_DIR / "event_log.txt"
 logging.basicConfig(
