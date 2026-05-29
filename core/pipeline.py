@@ -104,6 +104,7 @@ class Pipeline:
             s.face_restore_enabled,
         ])
         step = 0
+        warnings = []
 
         def _progress(msg):
             nonlocal step
@@ -115,50 +116,75 @@ class Pipeline:
         if s.denoise_enabled and not cancel_flag.is_set():
             _progress("Đang khử noise...")
             logger.debug("Pipeline: Denoise")
-            proc = self._get_processor("denoiser")
-            result = proc.process(
-                result,
-                luminance_strength=s.denoise_strength,
-                color_strength=s.denoise_color_strength,
-            )
+            try:
+                proc = self._get_processor("denoiser")
+                result = proc.process(
+                    result,
+                    luminance_strength=s.denoise_strength,
+                    color_strength=s.denoise_color_strength,
+                )
+            except Exception as e:
+                msg = f"Khử noise thất bại: {e}"
+                logger.warning(msg)
+                warnings.append(msg)
 
         # ── Step 2: Upscale ──────────────────────────────────────────
         if s.upscale_enabled and not cancel_flag.is_set():
             _progress(f"Đang upscale {s.upscale_factor}x...")
             logger.debug(f"Pipeline: Upscale {s.upscale_factor}x model={s.upscale_model}")
-            proc = self._get_processor("upscaler")
-            result = proc.process(
-                result,
-                scale=s.upscale_factor,
-                model_name=s.upscale_model,
-                tile=s.upscale_tile,
-            )
+            try:
+                proc = self._get_processor("upscaler")
+                result = proc.process(
+                    result,
+                    scale=s.upscale_factor,
+                    model_name=s.upscale_model,
+                    tile=s.upscale_tile,
+                )
+            except Exception as e:
+                msg = f"Upscale thất bại: {e}"
+                logger.warning(msg)
+                warnings.append(msg)
 
         # ── Step 3: Sharpen ──────────────────────────────────────────
         if s.sharpen_enabled and not cancel_flag.is_set():
             _progress("Đang làm nét...")
             logger.debug("Pipeline: Sharpen")
-            proc = self._get_processor("sharpener")
-            result = proc.process(
-                result,
-                amount=s.sharpen_amount,
-                radius=s.sharpen_radius,
-                threshold=s.sharpen_threshold,
-            )
+            try:
+                proc = self._get_processor("sharpener")
+                result = proc.process(
+                    result,
+                    amount=s.sharpen_amount,
+                    radius=s.sharpen_radius,
+                    threshold=s.sharpen_threshold,
+                )
+            except Exception as e:
+                msg = f"Làm nét thất bại: {e}"
+                logger.warning(msg)
+                warnings.append(msg)
 
         # ── Step 4: Face Restore (optional) ─────────────────────────
         if s.face_restore_enabled and not cancel_flag.is_set():
             _progress("Đang phục hồi khuôn mặt (AI)...")
             logger.debug(f"Pipeline: Face Restore model={s.face_restore_model}")
-            proc = self._get_processor("face_restorer")
-            result = proc.process(
-                result,
-                fidelity=s.face_restore_fidelity,
-                model_name=s.face_restore_model,
-                upsample=s.face_restore_upsample,
-            )
+            try:
+                proc = self._get_processor("face_restorer")
+                result = proc.process(
+                    result,
+                    fidelity=s.face_restore_fidelity,
+                    model_name=s.face_restore_model,
+                    upsample=s.face_restore_upsample,
+                )
+            except Exception as e:
+                msg = f"Face Restore thất bại: {e}"
+                logger.warning(msg)
+                warnings.append(msg)
 
-        progress_cb(100.0, "Hoàn thành!")
+        if warnings:
+            warn_summary = "\n".join(f"⚠ {w}" for w in warnings)
+            progress_cb(100.0, f"Xong (có cảnh báo)")
+            logger.warning(f"Pipeline hoàn thành với {len(warnings)} cảnh báo:\n{warn_summary}")
+        else:
+            progress_cb(100.0, "Hoàn thành!")
         return result
 
     def unload_models(self):

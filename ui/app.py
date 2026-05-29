@@ -466,9 +466,14 @@ class PhotoProApp(ctk.CTk):
         self._set_processing_state(False)
         self._btn_save.configure(state="normal")
         h, w = self._result_image.shape[:2]
-        self._set_status(f"✅ Xử lý xong! Kết quả: {w}×{h}px")
         self._progress_bar.set(1.0)
-        self._lbl_step.configure(text="Hoàn thành!")
+        # Kiểm tra nếu có cảnh báo từ pipeline
+        lbl = self._lbl_step.cget("text")
+        if "cảnh báo" in lbl.lower():
+            self._set_status(f"⚠ Xong (một số bước bị bỏ qua) | {w}×{h}px")
+        else:
+            self._set_status(f"✅ Xử lý xong! Kết quả: {w}×{h}px")
+            self._lbl_step.configure(text="Hoàn thành!")
 
     def _on_process_error(self, msg: str):
         self.after(0, lambda: self._handle_error(msg))
