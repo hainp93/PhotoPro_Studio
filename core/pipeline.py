@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PipelineSettings:
     # --- Denoise ---
-    denoise_enabled: bool = True
+    denoise_enabled: bool = False          # Tắt mặc định — bật khi cần giảm noise
     denoise_strength: float = 5.0          # 0–20
     denoise_color_strength: float = 5.0
 

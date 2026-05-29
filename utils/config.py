@@ -33,7 +33,7 @@ class AppConfig:
     last_output_dir: str = ""
 
     # Processing defaults (sync với PipelineSettings)
-    denoise_enabled: bool = True
+    denoise_enabled: bool = False
     denoise_strength: float = 5.0
     denoise_color_strength: float = 5.0
 

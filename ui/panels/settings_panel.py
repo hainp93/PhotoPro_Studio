@@ -171,7 +171,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             button_color=ACCENT_DENOISE, button_hover_color=ACCENT_DENOISE,
             progress_color=ACCENT_DENOISE,
         )
-        self._denoise_on.select()
+        # Mặc định TẮt — chỉ bật khi cần, vì nó làm mờ nhẹ và triệt tiêu hiệu ứng sharpen
         self._denoise_on.pack(anchor="w", pady=(2, 4))
 
         self._denoise_lum, _ = _labeled_slider(
