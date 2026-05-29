@@ -171,7 +171,13 @@ class BeautyProcessor:
         # ✅ Key fix: nhân displacement với person_mask TRƯỚC khi tạo warp map
         # → Background pixels có mask=0 → displacement=0 → không bị dịch chuyển
         person_mask = self._get_person_mask(img)
-        person_mask_blurred = cv2.GaussianBlur(person_mask, (31, 31), 0)
+        
+        # Erode mask ~15px để co vào trong cơ thể người TRƯỚC khi blur
+        # → Vùng chuyển tiếp (feather) nằm BÊN TRONG người, không lan ra nền
+        erode_px = max(3, int(min(img.shape[:2]) * 0.008))  # ~0.8% min(h,w), ~15px với ảnh 2K
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1))
+        person_mask_eroded = cv2.erode(person_mask, kernel, iterations=1)
+        person_mask_blurred = cv2.GaussianBlur(person_mask_eroded, (31, 31), 0)
         
         # Áp displacement đã được mask vào warp map
         map_x = x_coords.astype(np.float32) + disp_x * person_mask_blurred
