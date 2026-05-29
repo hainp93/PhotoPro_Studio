@@ -98,10 +98,27 @@ def download_model(dst_dir, dst_name, url, size_mb) -> bool:
         return False
 
 
+def patch_codeformer_basicsr():
+    """Tạo basicsr/version.py nếu thiếu — cần cho import basicsr.__init__."""
+    cf_basicsr = ROOT / "CodeFormer_repo" / "basicsr"
+    if not cf_basicsr.exists():
+        return  # CodeFormer_repo chưa clone
+    ver_file = cf_basicsr / "version.py"
+    if not ver_file.exists():
+        ver_file.write_text("__version__ = '1.4.2-codeformer'\n")
+        print(f"  [PATCH] Created {ver_file}")
+    else:
+        print(f"  [SKIP]  basicsr/version.py already exists")
+
+
 def setup_all():
     print("=" * 60)
     print("PhotoPro Studio - Model Setup")
     print("=" * 60)
+
+    # Patch CodeFormer basicsr trước
+    print("\nPatching CodeFormer basicsr...")
+    patch_codeformer_basicsr()
 
     wedding_available = WEDDING_WEIGHTS.exists()
     if wedding_available:
