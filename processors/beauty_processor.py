@@ -59,8 +59,21 @@ class BeautyProcessor:
             lab_new = cv2.merge([l, a, b]).astype(np.uint8)
             smoothed = cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
             
-        # Blend lại phần mịn da/trắng hồng chỉ lên vùng cơ thể người (mask)
-        mask_3d = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+        # Tạo mask da (Skin Mask) dùng không gian màu YCrCb
+        ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+        lower_skin = np.array([0, 133, 77], dtype=np.uint8)
+        upper_skin = np.array([255, 173, 127], dtype=np.uint8)
+        skin_mask_img = cv2.inRange(ycrcb, lower_skin, upper_skin)
+        
+        # Chuyển về 0-1 và làm mềm viền
+        skin_mask_img = skin_mask_img.astype(np.float32) / 255.0
+        skin_mask_img = cv2.GaussianBlur(skin_mask_img, (5, 5), 0)
+        
+        # Kết hợp Mask người (tránh nhận nhầm bối cảnh) và Mask da
+        final_mask = mask * skin_mask_img
+            
+        # Blend lại phần mịn da/trắng hồng chỉ lên vùng da của người
+        mask_3d = np.repeat(final_mask[:, :, np.newaxis], 3, axis=2)
         result = (img * (1.0 - mask_3d) + smoothed * mask_3d).astype(np.uint8)
         return result
 
