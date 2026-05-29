@@ -143,18 +143,18 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._build_ui()
 
     def _build_ui(self):
-        pad = {"padx": 10, "pady": 5}
+        pad = {"padx": 8, "pady": 4}
 
         # Title
         title_frame = ctk.CTkFrame(self, fg_color="#1a1a35", corner_radius=8)
-        title_frame.pack(fill="x", padx=10, pady=(12, 8))
+        title_frame.pack(fill="x", padx=8, pady=(10, 6))
         ctk.CTkLabel(
             title_frame,
             text="⚙  Cài đặt xử lý",
-            font=("Inter", 14, "bold"),
+            font=("Inter", 13, "bold"),
             text_color=TEXT_PRIMARY,
             anchor="w",
-        ).pack(fill="x", padx=12, pady=10)
+        ).pack(fill="x", padx=10, pady=8)
 
         # ── Denoise ───────────────────────────────────────────────────
         ACCENT_DENOISE = "#3ecf8e"
@@ -166,12 +166,12 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._denoise_on = ctk.CTkSwitch(
             c, text="Bật khử noise",
-            font=("Inter", 12), text_color=TEXT_PRIMARY,
+            font=("Inter", 11), text_color=TEXT_PRIMARY,
             button_color=ACCENT_DENOISE, button_hover_color=ACCENT_DENOISE,
             progress_color=ACCENT_DENOISE,
         )
         self._denoise_on.select()
-        self._denoise_on.pack(anchor="w", pady=(2, 6))
+        self._denoise_on.pack(anchor="w", pady=(2, 4))
 
         self._denoise_lum, _ = _labeled_slider(
             c, "Luminance", 0, 20, 5.0, fmt=".1f", accent=ACCENT_DENOISE
@@ -190,34 +190,34 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._upscale_on = ctk.CTkSwitch(
             c, text="Bật upscale",
-            font=("Inter", 12), text_color=TEXT_PRIMARY,
+            font=("Inter", 11), text_color=TEXT_PRIMARY,
             button_color=ACCENT_UPSCALE, button_hover_color=ACCENT_UPSCALE,
             progress_color=ACCENT_UPSCALE,
         )
-        self._upscale_on.select()
-        self._upscale_on.pack(anchor="w", pady=(2, 6))
+        # Mặc định TẮt — cần cài basicsr+realesrgan mới dùng được
+        self._upscale_on.pack(anchor="w", pady=(2, 4))
 
         # Scale factor
         ctk.CTkLabel(
             c, text="Scale factor",
             font=("Inter", 11), text_color=TEXT_SECONDARY, anchor="w",
-        ).pack(fill="x", pady=(4, 2))
+        ).pack(fill="x", pady=(2, 1))
         self._scale_var = ctk.StringVar(value="2x")
-        scale_row = ctk.CTkFrame(c, fg_color="#1e1e3a", corner_radius=8)
-        scale_row.pack(fill="x", pady=(0, 6))
+        scale_row = ctk.CTkFrame(c, fg_color="#1e1e3a", corner_radius=6)
+        scale_row.pack(fill="x", pady=(0, 4))
         for s in ["2x", "4x"]:
             ctk.CTkRadioButton(
                 scale_row, text=s, variable=self._scale_var, value=s,
-                font=("Inter", 12), text_color=TEXT_PRIMARY,
-                radiobutton_width=18, radiobutton_height=18,
+                font=("Inter", 11), text_color=TEXT_PRIMARY,
+                radiobutton_width=16, radiobutton_height=16,
                 fg_color=ACCENT_UPSCALE, hover_color=ACCENT_UPSCALE,
-            ).pack(side="left", padx=14, pady=8)
+            ).pack(side="left", padx=12, pady=6)
 
         # Model
         ctk.CTkLabel(
             c, text="Model",
             font=("Inter", 11), text_color=TEXT_SECONDARY, anchor="w",
-        ).pack(fill="x", pady=(2, 2))
+        ).pack(fill="x", pady=(2, 1))
         self._model_var = ctk.StringVar(value="realesrgan-x4plus")
         self._model_menu = ctk.CTkOptionMenu(
             c, variable=self._model_var,
@@ -240,12 +240,12 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._sharpen_on = ctk.CTkSwitch(
             c, text="Bật làm nét",
-            font=("Inter", 12), text_color=TEXT_PRIMARY,
+            font=("Inter", 11), text_color=TEXT_PRIMARY,
             button_color=ACCENT_SHARPEN, button_hover_color=ACCENT_SHARPEN,
             progress_color=ACCENT_SHARPEN,
         )
         self._sharpen_on.select()
-        self._sharpen_on.pack(anchor="w", pady=(2, 6))
+        self._sharpen_on.pack(anchor="w", pady=(2, 4))
 
         self._sharpen_amount, _ = _labeled_slider(
             c, "Mức độ", 0, 3, 1.0, fmt=".1f", accent=ACCENT_SHARPEN
@@ -276,11 +276,11 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._face_on = ctk.CTkSwitch(
             c, text="Bật Face Restore",
-            font=("Inter", 12), text_color=TEXT_PRIMARY,
+            font=("Inter", 11), text_color=TEXT_PRIMARY,
             button_color=ACCENT_FACE, button_hover_color=ACCENT_FACE,
             progress_color=ACCENT_FACE,
         )
-        self._face_on.pack(anchor="w", pady=(2, 6))
+        self._face_on.pack(anchor="w", pady=(2, 4))
 
         self._face_fidelity, _ = _labeled_slider(
             c, "Fidelity (0=AI, 1=Original)", 0, 1, 0.5,
@@ -290,7 +290,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         ctk.CTkLabel(
             c, text="Model",
             font=("Inter", 11), text_color=TEXT_SECONDARY, anchor="w",
-        ).pack(fill="x", pady=(6, 2))
+        ).pack(fill="x", pady=(4, 1))
         self._face_model_var = ctk.StringVar(value="codeformer")
         ctk.CTkOptionMenu(
             c, variable=self._face_model_var,

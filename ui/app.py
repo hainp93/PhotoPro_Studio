@@ -139,7 +139,7 @@ class PhotoProApp(ctk.CTk):
 
     def _build_sidebar(self):
         sidebar = ctk.CTkFrame(
-            self._main_frame, width=240,
+            self._main_frame, width=200,
             fg_color=BG_SIDEBAR, corner_radius=0,
             border_width=1, border_color=BORDER,
         )
@@ -147,13 +147,13 @@ class PhotoProApp(ctk.CTk):
         sidebar.grid_propagate(False)
 
         # Logo / title
-        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=80)
+        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=72)
         logo_frame.pack(fill="x")
         logo_frame.pack_propagate(False)
-        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 30)).pack(pady=(12, 0))
+        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 26)).pack(pady=(10, 0))
         ctk.CTkLabel(
             logo_frame, text="PhotoPro Studio",
-            font=("Inter Bold", 13, "bold"),
+            font=("Inter Bold", 12, "bold"),
             text_color=ACCENT_BLUE,
         ).pack()
 
@@ -163,30 +163,30 @@ class PhotoProApp(ctk.CTk):
             "low": "#f76f6f", "cpu": "#7a94c0",
         }.get(self._gpu.gpu_tier, "#7a94c0")
         gpu_text = (
-            self._gpu.device_name[:24] + "…"
-            if len(self._gpu.device_name) > 24
+            self._gpu.device_name[:20] + "…"
+            if len(self._gpu.device_name) > 20
             else self._gpu.device_name
         )
         gpu_frame = ctk.CTkFrame(sidebar, fg_color="#181830", corner_radius=6)
-        gpu_frame.pack(fill="x", padx=10, pady=(8, 2))
+        gpu_frame.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkLabel(
             gpu_frame, text=f"🎮  {gpu_text}",
             font=("Inter", 10), text_color=gpu_color,
-            wraplength=200, anchor="w",
-        ).pack(fill="x", padx=10, pady=5)
+            wraplength=175, anchor="w",
+        ).pack(fill="x", padx=8, pady=4)
 
         # Tab buttons
         tab_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        tab_frame.pack(fill="x", padx=10, pady=(10, 6))
+        tab_frame.pack(fill="x", padx=8, pady=(8, 4))
 
-        tab_style = {"height": 38, "corner_radius": 10, "font": ("Inter", 12, "bold")}
+        tab_style = {"height": 36, "corner_radius": 8, "font": ("Inter", 12, "bold")}
         self._btn_single = ctk.CTkButton(
             tab_frame, text="🖼  Đơn lẻ",
             command=lambda: self._switch_tab("single"),
             fg_color=ACCENT_BLUE, hover_color="#3a7aed",
             text_color="white", **tab_style,
         )
-        self._btn_single.pack(fill="x", pady=(0, 4))
+        self._btn_single.pack(fill="x", pady=(0, 3))
 
         self._btn_batch = ctk.CTkButton(
             tab_frame, text="📦  Batch",
@@ -198,19 +198,19 @@ class PhotoProApp(ctk.CTk):
 
         # Action buttons (chỉ single mode)
         self._sidebar_actions = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_actions.pack(fill="x", padx=10)
+        self._sidebar_actions.pack(fill="x", padx=8)
 
         sep = ctk.CTkFrame(self._sidebar_actions, fg_color=BORDER, height=1)
-        sep.pack(fill="x", pady=8)
+        sep.pack(fill="x", pady=6)
 
-        action_style = {"height": 42, "corner_radius": 10, "font": ("Inter", 12, "bold")}
+        action_style = {"height": 38, "corner_radius": 8, "font": ("Inter", 12, "bold")}
 
         ctk.CTkButton(
             self._sidebar_actions, text="📂  Mở Ảnh",
             command=self._open_file,
             fg_color="#1e1e3a", hover_color="#2a2a55",
             text_color=TEXT_PRIMARY, **action_style,
-        ).pack(fill="x", pady=(0, 4))
+        ).pack(fill="x", pady=(0, 3))
 
         self._btn_process = ctk.CTkButton(
             self._sidebar_actions, text="⚡  Xử Lý",
@@ -219,7 +219,7 @@ class PhotoProApp(ctk.CTk):
             text_color="white", **action_style,
             state="disabled",
         )
-        self._btn_process.pack(fill="x", pady=(0, 4))
+        self._btn_process.pack(fill="x", pady=(0, 3))
 
         self._btn_save = ctk.CTkButton(
             self._sidebar_actions, text="💾  Lưu Kết Quả",
@@ -228,7 +228,7 @@ class PhotoProApp(ctk.CTk):
             text_color="#3ecf8e", **action_style,
             state="disabled",
         )
-        self._btn_save.pack(fill="x", pady=(0, 4))
+        self._btn_save.pack(fill="x", pady=(0, 3))
 
         ctk.CTkButton(
             self._sidebar_actions, text="↺  Reset",
@@ -239,23 +239,23 @@ class PhotoProApp(ctk.CTk):
 
         # Progress
         sep2 = ctk.CTkFrame(sidebar, fg_color=BORDER, height=1)
-        sep2.pack(fill="x", padx=10, pady=8)
+        sep2.pack(fill="x", padx=8, pady=6)
 
         self._sidebar_progress = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_progress.pack(fill="x", padx=10)
+        self._sidebar_progress.pack(fill="x", padx=8)
 
         self._progress_bar = ctk.CTkProgressBar(
             self._sidebar_progress, height=6,
             progress_color=ACCENT_BLUE, fg_color="#1e1e3a",
             corner_radius=3,
         )
-        self._progress_bar.pack(fill="x", pady=(0, 4))
+        self._progress_bar.pack(fill="x", pady=(0, 3))
         self._progress_bar.set(0)
 
         self._lbl_step = ctk.CTkLabel(
             self._sidebar_progress, text="",
             font=("Inter", 10), text_color=TEXT_DIM,
-            wraplength=210,
+            wraplength=180,
         )
         self._lbl_step.pack()
 
@@ -264,10 +264,10 @@ class PhotoProApp(ctk.CTk):
             command=self._cancel_process,
             fg_color="#3d1a1a", hover_color="#5a2020",
             text_color="#f76f6f",
-            height=36, corner_radius=10, font=("Inter", 11, "bold"),
+            height=34, corner_radius=8, font=("Inter", 11, "bold"),
             state="disabled",
         )
-        self._btn_cancel.pack(fill="x", padx=10, pady=4)
+        self._btn_cancel.pack(fill="x", padx=8, pady=4)
 
         # Bottom: Preset manager
         from ui.widgets.preset_manager import PresetManagerWidget
@@ -306,7 +306,7 @@ class PhotoProApp(ctk.CTk):
 
     def _build_right_panel(self):
         right = ctk.CTkFrame(
-            self._main_frame, width=280,
+            self._main_frame, width=260,
             fg_color=BG_SETTINGS, corner_radius=0,
             border_width=1, border_color=BORDER,
         )

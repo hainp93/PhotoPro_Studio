@@ -52,8 +52,15 @@ class Upscaler:
         if self._loaded_model == model_name:
             return  # already loaded
 
-        from basicsr.archs.rrdbnet_arch import RRDBNet
-        from basicsr.utils.download_util import load_file_from_url
+        try:
+            from basicsr.archs.rrdbnet_arch import RRDBNet
+            from basicsr.utils.download_util import load_file_from_url
+        except ImportError:
+            raise ImportError(
+                "Thư viện 'basicsr' chưa được cài đặt.\n"
+                "Cài đặt bằng lệnh:\n"
+                "  pip install basicsr realesrgan"
+            )
         from core.gpu_detector import get_gpu_info
 
         gpu = get_gpu_info()
@@ -88,7 +95,14 @@ class Upscaler:
         try:
             from realesrgan import RealESRGANer
         except ImportError:
-            from basicsr.utils.realesrgan_utils import RealESRGANer
+            try:
+                from basicsr.utils.realesrgan_utils import RealESRGANer
+            except ImportError:
+                raise ImportError(
+                    "Thư viện 'realesrgan' chưa được cài đặt.\n"
+                    "Cài đặt bằng lệnh:\n"
+                    "  pip install realesrgan"
+                )
 
         self._upsampler = RealESRGANer(
             scale=cfg["scale"],
