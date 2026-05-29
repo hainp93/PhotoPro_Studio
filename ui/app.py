@@ -18,15 +18,15 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ─── Design tokens ──────────────────────────────────────────────────────────
-BG_APP      = "#0b0b18"
-BG_TOPBAR   = "#10101f"
-BG_CENTER   = "#0b0b18"
-BG_SETTINGS = "#10101f"
-ACCENT      = "#4f8ef7"
-ACCENT_G    = "#3ecf8e"
-TEXT_HI     = "#eef2ff"
-TEXT_DIM    = "#4a6080"
-BORDER      = "#1e2040"
+BG_APP      = "#121212"
+BG_TOPBAR   = "#1e1e1e"
+BG_CENTER   = "#0a0a0a"
+BG_SETTINGS = "#181818"
+ACCENT      = "#2979ff"
+ACCENT_G    = "#00e676"
+TEXT_HI     = "#ffffff"
+TEXT_DIM    = "#a0a0a0"
+BORDER      = "#333333"
 
 
 class PhotoProApp(ctk.CTk):
@@ -173,38 +173,42 @@ class PhotoProApp(ctk.CTk):
         ctk.CTkButton(
             left, text="📂  Mở Ảnh",
             command=self._open_file,
-            fg_color="#1a1f3a", hover_color="#222845", text_color=TEXT_HI,
+            fg_color="transparent", hover_color="#222222", text_color=TEXT_HI,
+            border_width=1, border_color=BORDER,
             width=100, **act_kw,
-        ).pack(side="left", padx=(0, 4))
+        ).pack(side="left", padx=(0, 6))
 
         self._btn_process = ctk.CTkButton(
             left, text="⚡  Xử Lý",
             command=self._process_single,
-            fg_color=ACCENT, hover_color="#3a7aed", text_color="white",
+            fg_color=ACCENT, hover_color="#1565c0", text_color="white",
             width=90, state="disabled", **act_kw,
         )
-        self._btn_process.pack(side="left", padx=(0, 4))
+        self._btn_process.pack(side="left", padx=(0, 6))
 
         self._btn_save = ctk.CTkButton(
             left, text="💾  Lưu",
             command=self._save_result,
-            fg_color="#1a3020", hover_color="#223a28", text_color=ACCENT_G,
+            fg_color="transparent", hover_color="#1a2e1e", text_color=ACCENT_G,
+            border_width=1, border_color=BORDER,
             width=72, state="disabled", **act_kw,
         )
-        self._btn_save.pack(side="left", padx=(0, 4))
+        self._btn_save.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
             left, text="↺  Reset",
             command=self._reset,
-            fg_color="#1e1010", hover_color="#2a1818", text_color="#c06060",
+            fg_color="transparent", hover_color="#2a2a2a", text_color=TEXT_DIM,
+            border_width=1, border_color=BORDER,
             width=78, **act_kw,
-        ).pack(side="left", padx=(0, 4))
+        ).pack(side="left", padx=(0, 6))
 
         # Hủy button
         self._btn_cancel = ctk.CTkButton(
             left, text="■  Hủy",
             command=self._cancel_process,
-            fg_color="#2a1010", hover_color="#3a1515", text_color="#f06060",
+            fg_color="transparent", hover_color="#3a1c1c", text_color="#f76f6f",
+            border_width=1, border_color=BORDER,
             width=72, state="disabled", **act_kw,
         )
         self._btn_cancel.pack(side="left")

@@ -195,66 +195,104 @@ class ImageViewer(ctk.CTkFrame):
 
         self._lbl_zoom.configure(text=f"{self._zoom*100:.0f}%")
 
-    def _np_to_pil(self, img: np.ndarray, w: int, h: int) -> Image.Image:
-        """Resize numpy BGR → PIL RGB."""
-        iw = int(img.shape[1] * self._zoom)
-        ih = int(img.shape[0] * self._zoom)
-        if iw <= 0 or ih <= 0:
-            iw, ih = 1, 1
-        resized = cv2.resize(img, (iw, ih), interpolation=cv2.INTER_LANCZOS4)
+    def _get_viewport_crop(self, img: np.ndarray, cw: int, ch: int, split_x: int = None, is_after: bool = False):
+        """
+        Thuật toán Smart Crop: Chỉ render phần ảnh hiển thị trên màn hình.
+        Trả về: (PIL Image, canvas_x, canvas_y)
+        """
+        ih, iw = img.shape[:2]
+        sw = iw * self._zoom
+        sh = ih * self._zoom
+
+        cx = cw / 2 + self._pan_x
+        cy = ch / 2 + self._pan_y
+
+        left = cx - sw / 2
+        top = cy - sh / 2
+        right = cx + sw / 2
+        bottom = cy + sh / 2
+
+        # Vùng giới hạn bởi màn hình
+        vis_left = max(0, left)
+        vis_top = max(0, top)
+        vis_right = min(cw, right)
+        vis_bottom = min(ch, bottom)
+
+        # Cắt thêm nếu đang ở chế độ Split
+        if split_x is not None:
+            if not is_after:
+                vis_right = min(vis_right, split_x)
+            else:
+                vis_left = max(vis_left, split_x)
+
+        if vis_left >= vis_right or vis_top >= vis_bottom:
+            return None, 0, 0
+
+        # Ánh xạ ngược tọa độ màn hình về tọa độ ảnh gốc
+        src_left = int((vis_left - left) / self._zoom)
+        src_top = int((vis_top - top) / self._zoom)
+        src_right = int((vis_right - left) / self._zoom)
+        src_bottom = int((vis_bottom - top) / self._zoom)
+
+        # Chống tràn viền
+        src_left = max(0, min(iw, src_left))
+        src_right = max(0, min(iw, src_right))
+        src_top = max(0, min(ih, src_top))
+        src_bottom = max(0, min(ih, src_bottom))
+
+        cropped = img[src_top:src_bottom, src_left:src_right]
+        if cropped.size == 0:
+            return None, 0, 0
+
+        dst_w = int(vis_right - vis_left)
+        dst_h = int(vis_bottom - vis_top)
+        
+        # Chọn interpolation tùy theo zoom
+        interp = cv2.INTER_LANCZOS4 if self._zoom > 1.0 else cv2.INTER_AREA
+        resized = cv2.resize(cropped, (dst_w, dst_h), interpolation=interp)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        return Image.fromarray(rgb)
+        
+        return Image.fromarray(rgb), vis_left, vis_top
+
 
     def _draw_single(self, img: np.ndarray, cw: int, ch: int):
-        pil = self._np_to_pil(img, cw, ch)
-        iw, ih = pil.size
-        x = cw // 2 - iw // 2 + self._pan_x
-        y = ch // 2 - ih // 2 + self._pan_y
+        pil, x, y = self._get_viewport_crop(img, cw, ch)
+        if pil is None:
+            return
+            
         self._after_tk = ImageTk.PhotoImage(pil)
         self._canvas.create_image(x, y, anchor="nw", image=self._after_tk)
         self._lbl_info.configure(text=f"{img.shape[1]}×{img.shape[0]}px")
 
+
     def _draw_split(self, cw: int, ch: int):
         split_x = int(cw * self._split_pos)
 
-        before_pil = self._np_to_pil(self._before_img, cw, ch)
-        after_pil = self._np_to_pil(self._after_img, cw, ch)
+        # Before (Bên trái)
+        pil_b, xb, yb = self._get_viewport_crop(self._before_img, cw, ch, split_x, is_after=False)
+        if pil_b:
+            self._before_tk = ImageTk.PhotoImage(pil_b)
+            self._canvas.create_image(xb, yb, anchor="nw", image=self._before_tk)
 
-        iw, ih = before_pil.size
-        ox = cw // 2 - iw // 2 + self._pan_x
-        oy = ch // 2 - ih // 2 + self._pan_y
+        # After (Bên phải)
+        pil_a, xa, ya = self._get_viewport_crop(self._after_img, cw, ch, split_x, is_after=True)
+        if pil_a:
+            self._after_tk = ImageTk.PhotoImage(pil_a)
+            self._canvas.create_image(xa, ya, anchor="nw", image=self._after_tk)
 
-        # Composite: before bên trái split, after bên phải
-        combined = Image.new("RGB", (cw, ch), (26, 26, 46))
-        # Before
-        before_crop_w = max(0, split_x - ox)
-        if before_crop_w > 0 and iw > 0:
-            before_cropped = before_pil.crop((0, 0, min(before_crop_w, iw), ih))
-            combined.paste(before_cropped, (ox, oy))
-        # After
-        after_start = max(0, split_x - ox)
-        if after_start < iw:
-            after_cropped = after_pil.crop((after_start, 0, iw, ih))
-            combined.paste(after_cropped, (ox + after_start, oy))
-
-        # Divider line — dày hơn và dễ nhìn hơn
-        draw = ImageDraw.Draw(combined)
-        draw.line([(split_x, 0), (split_x, ch)], fill="#4f8ef7", width=3)
-        # Drag handle ở giữa
+        # Divider line
+        self._canvas.create_line(split_x, 0, split_x, ch, fill="#4f8ef7", width=3)
         hx, hy = split_x, ch // 2
-        draw.ellipse([hx - 14, hy - 14, hx + 14, hy + 14], fill="#4f8ef7")
-        draw.line([(hx - 6, hy), (hx + 6, hy)], fill="#ffffff", width=2)
-        draw.line([(hx - 6, hy - 5), (hx - 6, hy + 5)], fill="#ffffff", width=2)
-        draw.line([(hx + 6, hy - 5), (hx + 6, hy + 5)], fill="#ffffff", width=2)
+        self._canvas.create_oval(hx - 14, hy - 14, hx + 14, hy + 14, fill="#4f8ef7", outline="")
+        self._canvas.create_line(hx - 6, hy, hx + 6, hy, fill="#ffffff", width=2)
+        self._canvas.create_line(hx - 6, hy - 5, hx - 6, hy + 5, fill="#ffffff", width=2)
+        self._canvas.create_line(hx + 6, hy - 5, hx + 6, hy + 5, fill="#ffffff", width=2)
 
         # Labels
-        draw.rectangle([split_x - 62, 8, split_x - 4, 28], fill=(17, 17, 40, 210))
-        draw.text((split_x - 58, 12), "BEFORE", fill="#aac8ee")
-        draw.rectangle([split_x + 4, 8, split_x + 60, 28], fill=(17, 17, 40, 210))
-        draw.text((split_x + 8, 12), "AFTER", fill="#4f8ef7")
-
-        self._before_tk = ImageTk.PhotoImage(combined)
-        self._canvas.create_image(0, 0, anchor="nw", image=self._before_tk)
+        self._canvas.create_rectangle(split_x - 62, 8, split_x - 4, 28, fill="#111128", outline="", stipple="gray50")
+        self._canvas.create_text(split_x - 33, 18, text="BEFORE", fill="#aac8ee", font=("Inter", 10, "bold"))
+        self._canvas.create_rectangle(split_x + 4, 8, split_x + 60, 28, fill="#111128", outline="", stipple="gray50")
+        self._canvas.create_text(split_x + 32, 18, text="AFTER", fill="#4f8ef7", font=("Inter", 10, "bold"))
 
         h, w = self._before_img.shape[:2]
         self._lbl_info.configure(text=f"{w}×{h}px")

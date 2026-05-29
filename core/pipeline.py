@@ -35,10 +35,10 @@ class PipelineSettings:
     sharpen_threshold: int = 3             # 0–10
 
     # --- Face Restore ---
-    face_restore_enabled: bool = False
+    face_restore_enabled: bool = True      # Bật mặc định để cứu nét
     face_restore_fidelity: float = 0.5     # 0=AI, 1=original
     face_restore_model: str = "codeformer" # "codeformer" | "gfpgan"
-    face_restore_upsample: bool = True
+    face_restore_upsample: bool = False    # Ảnh Fullframe đã đủ lớn, không cần upsample 2x
     face_restore_high_res: bool = True     # Quét toàn bộ ảnh (không thu nhỏ)
 
     # --- Export ---

@@ -8,18 +8,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ─── Design tokens ────────────────────────────────────────────────────────────
-CARD_BG        = "#161628"
-CARD_BORDER    = "#252545"
-HEADER_BG      = "#1c1c36"
-TEXT_PRIMARY   = "#dde6ff"
-TEXT_SECONDARY = "#7a94c0"
-TEXT_DIM       = "#445577"
+CARD_BG        = "#181818"
+CARD_BORDER    = "#2a2a2a"
+HEADER_BG      = "#1e1e1e"
+TEXT_PRIMARY   = "#ffffff"
+TEXT_SECONDARY = "#a0a0a0"
+TEXT_DIM       = "#666666"
+ACCENT         = "#2979ff"
+
 
 
 class SectionFrame(ctk.CTkFrame):
     """Nhóm cài đặt có tiêu đề collapsible — thiết kế card hiện đại."""
 
-    def __init__(self, master, title: str, accent: str = "#4f8ef7",
+    def __init__(self, master, title: str, accent: str = ACCENT,
                  icon: str = "", **kwargs):
         super().__init__(
             master,
@@ -80,8 +82,9 @@ class SectionFrame(ctk.CTkFrame):
 def _labeled_slider(
     parent, label: str, from_: float, to: float,
     default: float, steps: int = 100,
+    default: float, steps: int = 100,
     fmt: str = ".1f",
-    accent: str = "#4f8ef7",
+    accent: str = ACCENT,
 ) -> tuple[ctk.CTkSlider, ctk.CTkLabel]:
     """Slider có label + giá trị hiển thị, thiết kế hiện đại."""
     container = ctk.CTkFrame(parent, fg_color="transparent")
@@ -147,9 +150,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         pad = {"padx": 8, "pady": 3}
 
         # ── Denoise ───────────────────────────────────────────────────
-        ACCENT_DENOISE = "#3ecf8e"
         self._sec_denoise = SectionFrame(
-            self, title="Khử Noise", accent=ACCENT_DENOISE, icon="🔇"
+            self, title="Khử Noise", accent=ACCENT, icon="🔇"
         )
         self._sec_denoise.pack(fill="x", **pad)
         c = self._sec_denoise.content
@@ -157,22 +159,21 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._denoise_on = ctk.CTkSwitch(
             c, text="Bật khử noise",
             font=("Inter", 12), text_color=TEXT_PRIMARY,
-            button_color=ACCENT_DENOISE, button_hover_color=ACCENT_DENOISE,
-            progress_color=ACCENT_DENOISE,
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
         )
         self._denoise_on.pack(anchor="w", pady=(2, 2))
 
         self._denoise_lum, _ = _labeled_slider(
-            c, "Luminance", 0, 20, 5.0, fmt=".1f", accent=ACCENT_DENOISE
+            c, "Luminance", 0, 20, 5.0, fmt=".1f", accent=ACCENT
         )
         self._denoise_color, _ = _labeled_slider(
-            c, "Color", 0, 20, 5.0, fmt=".1f", accent=ACCENT_DENOISE
+            c, "Color", 0, 20, 5.0, fmt=".1f", accent=ACCENT
         )
 
         # ── Upscale ───────────────────────────────────────────────────
-        ACCENT_UPSCALE = "#4f8ef7"
         self._sec_upscale = SectionFrame(
-            self, title="Upscale (Real-ESRGAN)", accent=ACCENT_UPSCALE, icon="🔍"
+            self, title="Upscale (Real-ESRGAN)", accent=ACCENT, icon="🔍"
         )
         self._sec_upscale.pack(fill="x", **pad)
         c = self._sec_upscale.content
@@ -180,17 +181,13 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._upscale_on = ctk.CTkSwitch(
             c, text="Bật upscale",
             font=("Inter", 11), text_color=TEXT_PRIMARY,
-            button_color=ACCENT_UPSCALE, button_hover_color=ACCENT_UPSCALE,
-            progress_color=ACCENT_UPSCALE,
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
         )
-        # Tự bật nếu có GPU đủ mạnh (high/mid tier với CUDA)
-        gpu_has_power = (
-            self._gpu is not None
-            and self._gpu.has_cuda
-            and self._gpu.gpu_tier in ("high", "mid")
-        )
-        if gpu_has_power:
-            self._upscale_on.select()
+        # Tắt tự động bật upscale (theo ý kiến người dùng)
+        # gpu_has_power = (...)
+        # if gpu_has_power:
+        #     self._upscale_on.select()
         self._upscale_on.pack(anchor="w", pady=(2, 4))
 
         # Scale factor
@@ -206,7 +203,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                 scale_row, text=s, variable=self._scale_var, value=s,
                 font=("Inter", 11), text_color=TEXT_PRIMARY,
                 radiobutton_width=16, radiobutton_height=16,
-                fg_color=ACCENT_UPSCALE, hover_color=ACCENT_UPSCALE,
+                fg_color=ACCENT, hover_color=ACCENT,
             ).pack(side="left", padx=12, pady=6)
 
         # Model
@@ -219,7 +216,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             c, variable=self._model_var,
             values=["realesrgan-x4plus", "realesrgan-x2plus", "realesrgan-x4plus-anime"],
             font=("Inter", 11),
-            fg_color="#1e1e3a", button_color=ACCENT_UPSCALE,
+            fg_color="#1e1e3a", button_color=ACCENT,
             button_hover_color="#3a7aed",
             dropdown_fg_color="#1a1a35",
             dropdown_text_color=TEXT_PRIMARY,
@@ -227,9 +224,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._model_menu.pack(fill="x", pady=(0, 2))
 
         # ── Sharpen ───────────────────────────────────────────────────
-        ACCENT_SHARPEN = "#f5a623"
         self._sec_sharpen = SectionFrame(
-            self, title="Làm Nét", accent=ACCENT_SHARPEN, icon="✨"
+            self, title="Làm Nét", accent=ACCENT, icon="✨"
         )
         self._sec_sharpen.pack(fill="x", **pad)
         c = self._sec_sharpen.content
@@ -237,8 +233,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._sharpen_on = ctk.CTkSwitch(
             c, text="Bật làm nét",
             font=("Inter", 12), text_color=TEXT_PRIMARY,
-            button_color=ACCENT_SHARPEN, button_hover_color=ACCENT_SHARPEN,
-            progress_color=ACCENT_SHARPEN,
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
         )
         self._sharpen_on.select()
         self._sharpen_on.pack(anchor="w", pady=(2, 4))
@@ -248,9 +244,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         ai_row.pack(fill="x", pady=(0, 6))
         self._sharpen_ai_on = ctk.CTkSwitch(
             ai_row, text="⚡ AI Làm Nét (Real-ESRGAN → resize gốc)",
-            font=("Inter", 11), text_color="#f5a623",
-            button_color="#f5a623", button_hover_color="#e09010",
-            progress_color="#f5a623",
+            font=("Inter", 11, "bold"), text_color="#f5a623",
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
             command=self._on_sharpen_mode_change,
         )
         self._sharpen_ai_on.pack(anchor="w", padx=8, pady=6)
@@ -273,8 +269,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             variable=self._sharpen_method_var,
             font=("Inter", 11),
             fg_color="#1e1e3a",
-            selected_color=ACCENT_SHARPEN,
-            selected_hover_color="#d09010",
+            selected_color=ACCENT,
+            selected_hover_color=ACCENT,
             unselected_color="#1e1e3a",
             unselected_hover_color="#252540",
             text_color=TEXT_PRIMARY,
@@ -282,19 +278,20 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         ).pack(side="right")
 
         self._sharpen_amount, _ = _labeled_slider(
-            self._sharpen_classical, "Mức độ", 0, 3, 1.5, fmt=".1f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Mức độ", 0, 3, 1.5, fmt=".1f", accent=ACCENT
         )
         self._sharpen_radius, _ = _labeled_slider(
-            self._sharpen_classical, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT
         )
         self._sharpen_thresh, _ = _labeled_slider(
-            self._sharpen_classical, "Threshold", 0, 15, 3, steps=15, fmt=".0f", accent=ACCENT_SHARPEN
+            self._sharpen_classical, "Threshold", 0, 15, 3, steps=15, fmt=".0f", accent=ACCENT
         )
 
         # AI controls (ẩn mặc định)
         self._sharpen_ai_frame = ctk.CTkFrame(c, fg_color="transparent")
         self._sharpen_ai_strength, _ = _labeled_slider(
-            self._sharpen_ai_frame, "Cường độ AI", 0, 1, 0.85, fmt=".2f", accent=ACCENT_SHARPEN
+            self._sharpen_ai_frame, "Blend Strength", 0.0, 1.0, 0.85,
+            steps=100, fmt=".2f", accent=ACCENT,
         )
         ctk.CTkLabel(
             self._sharpen_ai_frame, text="Model AI",
@@ -305,16 +302,15 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             self._sharpen_ai_frame, variable=self._sharpen_ai_model_var,
             values=["realesrgan-x4plus", "realesrgan-x4plus-anime", "realesrgan-x2plus"],
             font=("Inter", 11),
-            fg_color="#1e1e3a", button_color=ACCENT_SHARPEN,
+            fg_color="#1e1e3a", button_color=ACCENT,
             button_hover_color="#e09010",
             dropdown_fg_color="#1a1a35",
             dropdown_text_color=TEXT_PRIMARY,
         ).pack(fill="x")
 
         # ── Face Restore ─────────────────────────────────────────────
-        ACCENT_FACE = "#e668a7"
         self._sec_face = SectionFrame(
-            self, title="Face Restore (AI)", accent=ACCENT_FACE, icon="👤"
+            self, title="Face Restore (AI)", accent=ACCENT, icon="👤"
         )
         self._sec_face.pack(fill="x", **pad)
         c = self._sec_face.content
@@ -331,22 +327,23 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._face_on = ctk.CTkSwitch(
             c, text="Bật Face Restore",
             font=("Inter", 11), text_color=TEXT_PRIMARY,
-            button_color=ACCENT_FACE, button_hover_color=ACCENT_FACE,
-            progress_color=ACCENT_FACE,
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
         )
+        self._face_on.select()
         self._face_on.pack(anchor="w", pady=(2, 4))
 
         self._face_high_res = ctk.CTkSwitch(
             c, text="Quét toàn bộ ảnh (tìm mặt ở xa)",
             font=("Inter", 11), text_color="#d45090",
-            button_color=ACCENT_FACE, button_hover_color=ACCENT_FACE,
-            progress_color=ACCENT_FACE,
+            button_color=ACCENT, button_hover_color=ACCENT,
+            progress_color=ACCENT,
         )
         self._face_high_res.pack(anchor="w", pady=(0, 6))
 
         self._face_fidelity, _ = _labeled_slider(
             c, "Fidelity (0=AI, 1=Original)", 0, 1, 0.5,
-            fmt=".2f", accent=ACCENT_FACE,
+            fmt=".2f", accent=ACCENT,
         )
 
         ctk.CTkLabel(
@@ -358,16 +355,15 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             c, variable=self._face_model_var,
             values=["codeformer", "gfpgan"],
             font=("Inter", 11),
-            fg_color="#1e1e3a", button_color=ACCENT_FACE,
+            fg_color="#1e1e3a", button_color=ACCENT,
             button_hover_color="#d45090",
             dropdown_fg_color="#1a1a35",
             dropdown_text_color=TEXT_PRIMARY,
         ).pack(fill="x", pady=(0, 2))
 
         # ── Export ────────────────────────────────────────────────────
-        ACCENT_EXPORT = "#a78bfa"
         self._sec_export = SectionFrame(
-            self, title="Export", accent=ACCENT_EXPORT, icon="💾"
+            self, title="Export", accent=ACCENT, icon="💾"
         )
         self._sec_export.pack(fill="x", **pad)
         c = self._sec_export.content
@@ -381,7 +377,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             c, variable=self._fmt_var,
             values=["PNG", "JPEG", "WEBP", "TIFF"],
             font=("Inter", 11),
-            fg_color="#1e1e3a", button_color=ACCENT_EXPORT,
+            fg_color="#1e1e3a", button_color=ACCENT,
             button_hover_color="#8b6ef0",
             dropdown_fg_color="#1a1a35",
             dropdown_text_color=TEXT_PRIMARY,
@@ -392,7 +388,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._quality_frame = ctk.CTkFrame(c, fg_color="transparent")
         self._quality_slider, _ = _labeled_slider(
             self._quality_frame, "Quality", 60, 100, 95,
-            steps=40, fmt=".0f", accent=ACCENT_EXPORT,
+            steps=40, fmt=".0f", accent=ACCENT,
         )
         # mặc định ẩn (PNG)
         # self._quality_frame.pack(fill="x")  # sẽ show khi chọn JPEG/WEBP
@@ -405,7 +401,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             c, font=("Inter", 11),
             placeholder_text="_enhanced",
             fg_color="#1e1e3a",
-            border_color=ACCENT_EXPORT,
+            border_color=ACCENT,
             border_width=1,
             text_color=TEXT_PRIMARY,
         )
