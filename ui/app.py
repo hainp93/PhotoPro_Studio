@@ -167,8 +167,7 @@ class PhotoProApp(ctk.CTk):
         ctk.CTkFrame(left, width=1, height=28, fg_color=BORDER).pack(side="left", padx=12)
 
         # Action buttons
-        act_kw = {"height": 32, "corner_radius": 8, "font": ("Inter", 11, "bold"),
-                  "border_width": 0}
+        act_kw = {"height": 32, "corner_radius": 8, "font": ("Inter", 11, "bold")}
 
         ctk.CTkButton(
             left, text="📂  Mở Ảnh",
@@ -182,6 +181,7 @@ class PhotoProApp(ctk.CTk):
             left, text="⚡  Xử Lý",
             command=self._process_single,
             fg_color=ACCENT, hover_color="#1565c0", text_color="white",
+            border_width=0,
             width=90, state="disabled", **act_kw,
         )
         self._btn_process.pack(side="left", padx=(0, 6))
