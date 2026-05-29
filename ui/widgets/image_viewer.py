@@ -22,7 +22,7 @@ class ImageViewer(ctk.CTkFrame):
 
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        self.configure(fg_color="#1a1a2e")
+        self.configure(fg_color="#0e0e1c")
 
         self._before_img: np.ndarray | None = None
         self._after_img: np.ndarray | None = None
@@ -44,7 +44,7 @@ class ImageViewer(ctk.CTkFrame):
         # Canvas
         self._canvas = tk.Canvas(
             self,
-            bg="#1a1a2e",
+            bg="#0e0e1c",
             highlightthickness=0,
             cursor="crosshair",
         )
@@ -67,40 +67,55 @@ class ImageViewer(ctk.CTkFrame):
         self._canvas.bind("<Motion>", self._on_mouse_move)
 
     def _build_toolbar(self):
-        self._toolbar = ctk.CTkFrame(self, fg_color="#0d0d1a", height=36, corner_radius=0)
+        self._toolbar = ctk.CTkFrame(
+            self, fg_color="#111128", height=40, corner_radius=0,
+            border_width=1, border_color="#252545",
+        )
         self._toolbar.pack(side="bottom", fill="x")
         self._toolbar.pack_propagate(False)
 
-        btn_style = {"width": 80, "height": 28, "corner_radius": 6, "font": ("Inter", 11)}
+        btn_style = {
+            "width": 70, "height": 30, "corner_radius": 8,
+            "font": ("Inter", 11),
+            "fg_color": "#1e1e3a", "hover_color": "#2d2d55",
+            "text_color": "#aabbdd",
+        }
 
         self._btn_fit = ctk.CTkButton(
             self._toolbar, text="Fit", command=self._fit_to_window, **btn_style
         )
-        self._btn_fit.pack(side="left", padx=(6, 2), pady=4)
+        self._btn_fit.pack(side="left", padx=(8, 3), pady=5)
 
         self._btn_100 = ctk.CTkButton(
             self._toolbar, text="100%", command=self._zoom_100, **btn_style
         )
-        self._btn_100.pack(side="left", padx=2, pady=4)
+        self._btn_100.pack(side="left", padx=3, pady=5)
 
         self._btn_split = ctk.CTkButton(
             self._toolbar, text="Split ◧",
-            command=self._toggle_split, **btn_style,
-            fg_color="#2d5a8e",
+            command=self._toggle_split,
+            width=80, height=30, corner_radius=8, font=("Inter", 11),
+            fg_color="#23355a", hover_color="#2d4a7a",
+            text_color="#7ab3f7",
         )
-        self._btn_split.pack(side="left", padx=2, pady=4)
+        self._btn_split.pack(side="left", padx=3, pady=5)
+
+        # Separator
+        ctk.CTkFrame(
+            self._toolbar, width=1, fg_color="#252545",
+        ).pack(side="left", fill="y", padx=6, pady=8)
 
         self._lbl_zoom = ctk.CTkLabel(
             self._toolbar, text="100%",
-            font=("Inter", 11), text_color="#8899aa",
+            font=("Inter", 11, "bold"), text_color="#4f8ef7",
         )
-        self._lbl_zoom.pack(side="right", padx=8)
+        self._lbl_zoom.pack(side="right", padx=10)
 
         self._lbl_info = ctk.CTkLabel(
             self._toolbar, text="Chưa có ảnh",
-            font=("Inter", 11), text_color="#6688aa",
+            font=("Inter", 11), text_color="#5c7aaa",
         )
-        self._lbl_info.pack(side="right", padx=8)
+        self._lbl_info.pack(side="right", padx=6)
 
     # ── Public API ───────────────────────────────────────────────────
     def set_before(self, image: np.ndarray | None):
@@ -202,15 +217,21 @@ class ImageViewer(ctk.CTkFrame):
             after_cropped = after_pil.crop((after_start, 0, iw, ih))
             combined.paste(after_cropped, (ox + after_start, oy))
 
-        # Divider line
+        # Divider line — dày hơn và dễ nhìn hơn
         draw = ImageDraw.Draw(combined)
-        draw.line([(split_x, 0), (split_x, ch)], fill="#00d4ff", width=2)
+        draw.line([(split_x, 0), (split_x, ch)], fill="#4f8ef7", width=3)
+        # Drag handle ở giữa
+        hx, hy = split_x, ch // 2
+        draw.ellipse([hx - 14, hy - 14, hx + 14, hy + 14], fill="#4f8ef7")
+        draw.line([(hx - 6, hy), (hx + 6, hy)], fill="#ffffff", width=2)
+        draw.line([(hx - 6, hy - 5), (hx - 6, hy + 5)], fill="#ffffff", width=2)
+        draw.line([(hx + 6, hy - 5), (hx + 6, hy + 5)], fill="#ffffff", width=2)
 
         # Labels
-        draw.rectangle([split_x - 60, 8, split_x - 4, 28], fill=(0, 0, 0, 180))
-        draw.text((split_x - 56, 11), "BEFORE", fill="#aaccee")
-        draw.rectangle([split_x + 4, 8, split_x + 56, 28], fill=(0, 0, 0, 180))
-        draw.text((split_x + 8, 11), "AFTER", fill="#00ffcc")
+        draw.rectangle([split_x - 62, 8, split_x - 4, 28], fill=(17, 17, 40, 210))
+        draw.text((split_x - 58, 12), "BEFORE", fill="#aac8ee")
+        draw.rectangle([split_x + 4, 8, split_x + 60, 28], fill=(17, 17, 40, 210))
+        draw.text((split_x + 8, 12), "AFTER", fill="#4f8ef7")
 
         self._before_tk = ImageTk.PhotoImage(combined)
         self._canvas.create_image(0, 0, anchor="nw", image=self._before_tk)
@@ -227,10 +248,10 @@ class ImageViewer(ctk.CTkFrame):
         self._redraw()
 
     def _on_press(self, event):
-        # Check nếu click gần divider
+        # Check nếu click gần divider — vùng bắt rộng 20px
         cw = self._canvas.winfo_width()
         split_x = int(cw * self._split_pos)
-        if self._split_mode and abs(event.x - split_x) < 12:
+        if self._split_mode and abs(event.x - split_x) < 20:
             self._dragging_split = True
         else:
             self._drag_start = (event.x - self._pan_x, event.y - self._pan_y)
@@ -256,7 +277,7 @@ class ImageViewer(ctk.CTkFrame):
     def _on_mouse_move(self, event):
         cw = self._canvas.winfo_width()
         split_x = int(cw * self._split_pos)
-        if self._split_mode and abs(event.x - split_x) < 12:
+        if self._split_mode and abs(event.x - split_x) < 20:
             self._canvas.configure(cursor="sb_h_double_arrow")
         else:
             self._canvas.configure(cursor="fleur" if self._drag_start else "crosshair")

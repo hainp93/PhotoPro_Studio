@@ -2,7 +2,6 @@
 RAW Image Reader — đọc file RAW từ máy ảnh (NEF, CR2, ARW, DNG...).
 Output: BGR uint8 numpy array sẵn sàng cho pipeline.
 """
-import rawpy
 import numpy as np
 import cv2
 import logging
@@ -25,6 +24,7 @@ class RawReader:
     """
     Đọc file RAW và convert sang BGR uint8.
     Hỗ trợ demosaic, white balance tự động, highlight recovery.
+    rawpy được import lazy — chỉ khi thực sự đọc file RAW.
     """
 
     def read(
@@ -41,6 +41,14 @@ class RawReader:
         output_bps     : 8 hoặc 16 bit
         Trả về: BGR uint8 (hoặc uint16 nếu output_bps=16)
         """
+        try:
+            import rawpy  # lazy import — tránh crash khi rawpy chưa cài
+        except ImportError:
+            raise ImportError(
+                "Thư viện 'rawpy' chưa được cài đặt.\n"
+                "Cài đặt bằng lệnh: pip install rawpy"
+            )
+
         with rawpy.imread(path) as raw:
             rgb = raw.postprocess(
                 use_camera_wb=use_camera_wb,
@@ -63,6 +71,12 @@ class RawReader:
 
     def get_metadata(self, path: str) -> dict:
         """Đọc metadata cơ bản của file RAW."""
+        try:
+            import rawpy  # lazy import
+        except ImportError:
+            logger.warning("rawpy not installed, cannot read RAW metadata")
+            return {}
+
         try:
             with rawpy.imread(path) as raw:
                 return {

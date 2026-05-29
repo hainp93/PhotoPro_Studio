@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# ─── Design tokens ──────────────────────────────────────────────────────────
+BG_APP        = "#0e0e1c"
+BG_SIDEBAR    = "#111128"
+BG_LOGO       = "#1a1b38"
+BG_CENTER     = "#0e0e1c"
+BG_SETTINGS   = "#0e0e1c"
+ACCENT_BLUE   = "#4f8ef7"
+ACCENT_CYAN   = "#3ecf8e"
+TEXT_PRIMARY  = "#dde6ff"
+TEXT_DIM      = "#5c7aaa"
+BORDER        = "#252545"
 
 class PhotoProApp(ctk.CTk):
     """
@@ -75,7 +86,7 @@ class PhotoProApp(ctk.CTk):
             self.iconbitmap(str(icon_path))
 
     def _apply_theme(self):
-        self.configure(fg_color="#0d0d1a")
+        self.configure(fg_color=BG_APP)
 
     # ── UI Build ─────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -127,117 +138,136 @@ class PhotoProApp(ctk.CTk):
         self.bind("<Control-s>", lambda e: self._save_result())
 
     def _build_sidebar(self):
-        sidebar = ctk.CTkFrame(self._main_frame, width=200, fg_color="#0f0f2a",
-                                corner_radius=0)
+        sidebar = ctk.CTkFrame(
+            self._main_frame, width=240,
+            fg_color=BG_SIDEBAR, corner_radius=0,
+            border_width=1, border_color=BORDER,
+        )
         sidebar.grid(row=0, column=0, sticky="nsew")
         sidebar.grid_propagate(False)
 
         # Logo / title
-        logo_frame = ctk.CTkFrame(sidebar, fg_color="#1a1a40", corner_radius=0, height=70)
+        logo_frame = ctk.CTkFrame(sidebar, fg_color=BG_LOGO, corner_radius=0, height=80)
         logo_frame.pack(fill="x")
         logo_frame.pack_propagate(False)
-        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 28)).pack(pady=(10, 0))
-        ctk.CTkLabel(logo_frame, text="PhotoPro Studio",
-                     font=("Inter Bold", 13, "bold"),
-                     text_color="#00d4ff").pack()
+        ctk.CTkLabel(logo_frame, text="📸", font=("Segoe UI Emoji", 30)).pack(pady=(12, 0))
+        ctk.CTkLabel(
+            logo_frame, text="PhotoPro Studio",
+            font=("Inter Bold", 13, "bold"),
+            text_color=ACCENT_BLUE,
+        ).pack()
 
         # GPU badge
-        gpu_color = {"high": "#4CAF50", "mid": "#FF9800", "low": "#F44336", "cpu": "#9E9E9E"}.get(
-            self._gpu.gpu_tier, "#9E9E9E"
+        gpu_color = {
+            "high": ACCENT_CYAN, "mid": "#f5a623",
+            "low": "#f76f6f", "cpu": "#7a94c0",
+        }.get(self._gpu.gpu_tier, "#7a94c0")
+        gpu_text = (
+            self._gpu.device_name[:24] + "…"
+            if len(self._gpu.device_name) > 24
+            else self._gpu.device_name
         )
-        gpu_text = self._gpu.device_name[:22] + "..." if len(self._gpu.device_name) > 22 else self._gpu.device_name
-        gpu_badge = ctk.CTkLabel(
-            sidebar, text=f"🎮 {gpu_text}",
-            font=("Inter", 9), text_color=gpu_color,
-            wraplength=180,
-        )
-        gpu_badge.pack(padx=8, pady=(8, 0))
+        gpu_frame = ctk.CTkFrame(sidebar, fg_color="#181830", corner_radius=6)
+        gpu_frame.pack(fill="x", padx=10, pady=(8, 2))
+        ctk.CTkLabel(
+            gpu_frame, text=f"🎮  {gpu_text}",
+            font=("Inter", 10), text_color=gpu_color,
+            wraplength=200, anchor="w",
+        ).pack(fill="x", padx=10, pady=5)
 
         # Tab buttons
         tab_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        tab_frame.pack(fill="x", padx=8, pady=12)
+        tab_frame.pack(fill="x", padx=10, pady=(10, 6))
 
-        tab_style = {"height": 36, "corner_radius": 8, "font": ("Inter", 12)}
+        tab_style = {"height": 38, "corner_radius": 10, "font": ("Inter", 12, "bold")}
         self._btn_single = ctk.CTkButton(
             tab_frame, text="🖼  Đơn lẻ",
             command=lambda: self._switch_tab("single"),
-            fg_color="#1565C0", **tab_style,
+            fg_color=ACCENT_BLUE, hover_color="#3a7aed",
+            text_color="white", **tab_style,
         )
-        self._btn_single.pack(fill="x", pady=2)
+        self._btn_single.pack(fill="x", pady=(0, 4))
 
         self._btn_batch = ctk.CTkButton(
             tab_frame, text="📦  Batch",
             command=lambda: self._switch_tab("batch"),
-            fg_color="#1a1a40", **tab_style,
+            fg_color="#1e1e3a", hover_color="#252550",
+            text_color=TEXT_DIM, **tab_style,
         )
-        self._btn_batch.pack(fill="x", pady=2)
+        self._btn_batch.pack(fill="x")
 
         # Action buttons (chỉ single mode)
         self._sidebar_actions = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_actions.pack(fill="x", padx=8)
+        self._sidebar_actions.pack(fill="x", padx=10)
 
-        sep = ctk.CTkFrame(self._sidebar_actions, fg_color="#2d2d5a", height=1)
+        sep = ctk.CTkFrame(self._sidebar_actions, fg_color=BORDER, height=1)
         sep.pack(fill="x", pady=8)
 
-        action_style = {"height": 38, "corner_radius": 8, "font": ("Inter", 12)}
+        action_style = {"height": 42, "corner_radius": 10, "font": ("Inter", 12, "bold")}
 
         ctk.CTkButton(
             self._sidebar_actions, text="📂  Mở Ảnh",
             command=self._open_file,
-            fg_color="#1e1e3a", hover_color="#2d5a8e", **action_style,
-        ).pack(fill="x", pady=2)
+            fg_color="#1e1e3a", hover_color="#2a2a55",
+            text_color=TEXT_PRIMARY, **action_style,
+        ).pack(fill="x", pady=(0, 4))
 
         self._btn_process = ctk.CTkButton(
             self._sidebar_actions, text="⚡  Xử Lý",
             command=self._process_single,
-            fg_color="#1565C0", hover_color="#1976D2", **action_style,
+            fg_color=ACCENT_BLUE, hover_color="#3a7aed",
+            text_color="white", **action_style,
             state="disabled",
         )
-        self._btn_process.pack(fill="x", pady=2)
+        self._btn_process.pack(fill="x", pady=(0, 4))
 
         self._btn_save = ctk.CTkButton(
             self._sidebar_actions, text="💾  Lưu Kết Quả",
             command=self._save_result,
-            fg_color="#2E7D32", hover_color="#388E3C", **action_style,
+            fg_color="#1f4d2a", hover_color="#2a6638",
+            text_color="#3ecf8e", **action_style,
             state="disabled",
         )
-        self._btn_save.pack(fill="x", pady=2)
+        self._btn_save.pack(fill="x", pady=(0, 4))
 
         ctk.CTkButton(
             self._sidebar_actions, text="↺  Reset",
             command=self._reset,
-            fg_color="#4a1a1a", hover_color="#8B1A1A", **action_style,
-        ).pack(fill="x", pady=2)
+            fg_color="#2a1a1a", hover_color="#3d2020",
+            text_color="#c07070", **action_style,
+        ).pack(fill="x")
 
         # Progress
-        sep2 = ctk.CTkFrame(sidebar, fg_color="#2d2d5a", height=1)
-        sep2.pack(fill="x", padx=8, pady=8)
+        sep2 = ctk.CTkFrame(sidebar, fg_color=BORDER, height=1)
+        sep2.pack(fill="x", padx=10, pady=8)
 
         self._sidebar_progress = ctk.CTkFrame(sidebar, fg_color="transparent")
-        self._sidebar_progress.pack(fill="x", padx=8)
+        self._sidebar_progress.pack(fill="x", padx=10)
 
         self._progress_bar = ctk.CTkProgressBar(
-            self._sidebar_progress, height=8,
-            progress_color="#00d4ff", fg_color="#1a1a40",
+            self._sidebar_progress, height=6,
+            progress_color=ACCENT_BLUE, fg_color="#1e1e3a",
+            corner_radius=3,
         )
         self._progress_bar.pack(fill="x", pady=(0, 4))
         self._progress_bar.set(0)
 
         self._lbl_step = ctk.CTkLabel(
             self._sidebar_progress, text="",
-            font=("Inter", 10), text_color="#6688aa",
-            wraplength=175,
+            font=("Inter", 10), text_color=TEXT_DIM,
+            wraplength=210,
         )
         self._lbl_step.pack()
 
         self._btn_cancel = ctk.CTkButton(
             sidebar, text="■  Hủy",
             command=self._cancel_process,
-            fg_color="#8B1A1A", hover_color="#C62828",
-            height=32, corner_radius=8, font=("Inter", 11),
+            fg_color="#3d1a1a", hover_color="#5a2020",
+            text_color="#f76f6f",
+            height=36, corner_radius=10, font=("Inter", 11, "bold"),
             state="disabled",
         )
-        self._btn_cancel.pack(fill="x", padx=8, pady=4)
+        self._btn_cancel.pack(fill="x", padx=10, pady=4)
 
         # Bottom: Preset manager
         from ui.widgets.preset_manager import PresetManagerWidget
@@ -246,17 +276,17 @@ class PhotoProApp(ctk.CTk):
             on_load=self._load_preset,
             on_save=self._save_preset,
         )
-        self._preset_mgr.pack(fill="x", padx=8, side="bottom", pady=8)
+        self._preset_mgr.pack(fill="x", padx=10, side="bottom", pady=10)
 
     def _build_center(self):
-        center = ctk.CTkFrame(self._main_frame, fg_color="#0d0d1a", corner_radius=0)
+        center = ctk.CTkFrame(self._main_frame, fg_color=BG_CENTER, corner_radius=0)
         center.grid(row=0, column=1, sticky="nsew")
 
         # Drop zone hint
         self._drop_hint = ctk.CTkLabel(
             center,
-            text="📂\n\nKéo thả ảnh vào đây\nhoặc nhấn Ctrl+O để mở",
-            font=("Inter", 16), text_color="#334466",
+            text="📂\n\nKéo thả ảnh vào đây\nhoặc nhấn  Ctrl+O  để mở",
+            font=("Inter", 17), text_color="#2a3860",
             justify="center",
         )
         self._drop_hint.place(relx=0.5, rely=0.5, anchor="center")
@@ -275,7 +305,11 @@ class PhotoProApp(ctk.CTk):
         )
 
     def _build_right_panel(self):
-        right = ctk.CTkFrame(self._main_frame, width=260, fg_color="#0d0d1a", corner_radius=0)
+        right = ctk.CTkFrame(
+            self._main_frame, width=280,
+            fg_color=BG_SETTINGS, corner_radius=0,
+            border_width=1, border_color=BORDER,
+        )
         right.grid(row=0, column=2, sticky="nsew")
         right.grid_propagate(False)
 
@@ -284,35 +318,39 @@ class PhotoProApp(ctk.CTk):
         self._settings_panel.pack(fill="both", expand=True)
 
     def _build_statusbar(self):
-        self._statusbar = ctk.CTkFrame(self, height=28, fg_color="#080820", corner_radius=0)
+        self._statusbar = ctk.CTkFrame(
+            self, height=30,
+            fg_color="#0a0a1e", corner_radius=0,
+            border_width=1, border_color=BORDER,
+        )
         self._statusbar.pack(side="bottom", fill="x")
         self._statusbar.pack_propagate(False)
 
         self._lbl_status = ctk.CTkLabel(
             self._statusbar, text="Sẵn sàng",
-            font=("Inter", 10), text_color="#6688aa", anchor="w",
+            font=("Inter", 10), text_color=TEXT_DIM, anchor="w",
         )
-        self._lbl_status.pack(side="left", padx=8)
+        self._lbl_status.pack(side="left", padx=10)
 
         gpu_summary = self._gpu.summary()
         self._lbl_gpu = ctk.CTkLabel(
             self._statusbar, text=gpu_summary,
-            font=("Inter", 9), text_color="#446688", anchor="e",
+            font=("Inter", 9), text_color="#364560", anchor="e",
         )
-        self._lbl_gpu.pack(side="right", padx=8)
+        self._lbl_gpu.pack(side="right", padx=10)
 
     # ── Tab Switching ─────────────────────────────────────────────────────
     def _switch_tab(self, tab: str):
         self._current_tab = tab
         if tab == "single":
-            self._btn_single.configure(fg_color="#1565C0")
-            self._btn_batch.configure(fg_color="#1a1a40")
+            self._btn_single.configure(fg_color=ACCENT_BLUE, text_color="white")
+            self._btn_batch.configure(fg_color="#1e1e3a", text_color=TEXT_DIM)
             self._batch_panel.pack_forget()
             self._viewer.pack(fill="both", expand=True)
-            self._sidebar_actions.pack(fill="x", padx=8)
+            self._sidebar_actions.pack(fill="x", padx=10)
         else:
-            self._btn_single.configure(fg_color="#1a1a40")
-            self._btn_batch.configure(fg_color="#1565C0")
+            self._btn_single.configure(fg_color="#1e1e3a", text_color=TEXT_DIM)
+            self._btn_batch.configure(fg_color=ACCENT_BLUE, text_color="white")
             self._viewer.pack_forget()
             self._batch_panel.pack(fill="both", expand=True)
             self._sidebar_actions.pack_forget()
