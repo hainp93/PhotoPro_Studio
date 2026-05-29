@@ -224,7 +224,7 @@ class FaceRestorer:
         temp_helper.clean_all()
         temp_helper.read_image(crop)
         
-        num = temp_helper.get_face_landmarks_5(only_center_face=True, resize=None)
+        num = temp_helper.get_face_landmarks_5(only_center_face=True, resize=640)
         if num == 0:
             logger.warning("Không tìm thấy 5 điểm neo (landmarks) trong khung thủ công.")
             return False
