@@ -16,17 +16,25 @@ Cần model weights (copy từ Wedding app hoặc download):
 import cv2
 import numpy as np
 import logging
+import sys
 import torch
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-WEIGHTS_DIR = Path(__file__).parent.parent / "weights"
+ROOT = Path(__file__).parent.parent
+WEIGHTS_DIR = ROOT / "weights"
 
-# Fallback: lấy weights từ Wedding Beauty Studio nếu có
+# Fallback: lấy weights từ Wedding Beauty Studio nếu có trên máy dev
 WEDDING_WEIGHTS = Path(
     r"f:\Setup\Wedding Beauty Studio V9.5\Wedding Beauty Studio V9.5\VGA\weights"
 )
+
+# Thêm CodeFormer repo vào sys.path (cài bằng git clone, không pip)
+_CF_REPO = ROOT / "CodeFormer_repo"
+if _CF_REPO.exists() and str(_CF_REPO) not in sys.path:
+    sys.path.insert(0, str(_CF_REPO))
+    logger.info(f"Added CodeFormer_repo to sys.path: {_CF_REPO}")
 
 
 def _resolve_weight(subdir: str, filename: str) -> str | None:
@@ -56,6 +64,15 @@ class FaceRestorer:
         """Load CodeFormer + (optional) RealESRGAN background upsampler."""
         from basicsr.utils.registry import ARCH_REGISTRY
 
+        # Registry name: "CodeFormer" hoặc "CodeFormer_basicsr" tùy phiên bản
+        cf_cls = ARCH_REGISTRY.get("CodeFormer") or ARCH_REGISTRY.get("CodeFormer_basicsr")
+        if cf_cls is None:
+            raise ImportError(
+                "CodeFormer không tìm thấy trong ARCH_REGISTRY. "
+                "Chạy: git clone https://github.com/sczhou/CodeFormer.git CodeFormer_repo "
+                "&& cd CodeFormer_repo && pip install -e . --no-deps"
+            )
+
         # ── Device ────────────────────────────────────────────────────
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         use_half = (
@@ -75,7 +92,7 @@ class FaceRestorer:
                 "Chạy: python scripts/setup_models.py"
             )
 
-        net = ARCH_REGISTRY.get("CodeFormer")(
+        net = cf_cls(
             dim_embd=512, codebook_size=1024,
             n_head=8, n_layers=9,
             connect_list=["32", "64", "128", "256"],
