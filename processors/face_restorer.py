@@ -31,10 +31,13 @@ WEDDING_WEIGHTS = Path(
 )
 
 # Thêm CodeFormer repo vào sys.path (cài bằng git clone, không pip)
+# CodeFormer_repo/facelib cũng available qua path này — không cần pip install facelib
 _CF_REPO = ROOT / "CodeFormer_repo"
-if _CF_REPO.exists() and str(_CF_REPO) not in sys.path:
-    sys.path.insert(0, str(_CF_REPO))
-    logger.info(f"Added CodeFormer_repo to sys.path: {_CF_REPO}")
+if _CF_REPO.exists():
+    for _p in [str(_CF_REPO)]:
+        if _p not in sys.path:
+            sys.path.insert(0, _p)
+    logger.info(f"sys.path += CodeFormer_repo: {_CF_REPO}")
 
 
 def _resolve_weight(subdir: str, filename: str) -> str | None:

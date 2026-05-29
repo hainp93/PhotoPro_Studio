@@ -61,8 +61,16 @@ def check_esrgan():
     return "basicsr.utils.realesrgan_utils OK"
 check("RealESRGAN utils", check_esrgan)
 
-# facelib
-check("facelib", lambda: __import__("facelib") and "installed")
+# facelib — từ CodeFormer_repo (bundled) hoặc pip
+def check_facelib():
+    import sys
+    from pathlib import Path
+    cf_repo = Path(__file__).parent.parent / "CodeFormer_repo"
+    if cf_repo.exists() and str(cf_repo) not in sys.path:
+        sys.path.insert(0, str(cf_repo))
+    import facelib
+    return f"facelib OK (from {'CodeFormer_repo' if cf_repo.exists() else 'pip'})"
+check("facelib", check_facelib)
 
 # CodeFormer arch
 def check_codeformer():
