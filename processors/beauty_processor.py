@@ -90,7 +90,8 @@ class BeautyProcessor:
             return img
 
         # Nhận diện để lấy vị trí center của người
-        results = self.pose_model(img, verbose=False)
+        # Tăng imgsz và giảm conf để nhận diện tốt hơn trên ảnh độ phân giải siêu cao (20MP+)
+        results = self.pose_model(img, verbose=False, imgsz=1280, conf=0.15)
         bodies = []
         faces = []
         
@@ -230,7 +231,7 @@ class BeautyProcessor:
         if self.pose_model is None:
             return []
             
-        results = self.pose_model(img, verbose=False)
+        results = self.pose_model(img, verbose=False, imgsz=1280, conf=0.15)
         bboxes = []
         if len(results) > 0 and results[0].boxes is not None and len(results[0].boxes) > 0:
             boxes = results[0].boxes.xyxy.cpu().numpy()
