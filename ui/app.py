@@ -422,10 +422,10 @@ class PhotoProApp(ctk.CTk):
         self._progress_bar.set(1.0)
         lbl = self._lbl_step.cget("text")
         if "cảnh báo" in lbl.lower():
-            self._set_status(f"⚠ Xong (một số bước bị bỏ qua) | {w}×{h}px")
+            self._set_status(f"⚠ Xong — Đang xem ở 100% zoom | Kéo thanh split để so sánh | {w}×{h}px")
         else:
             self._lbl_step.configure(text="Hoàn thành!")
-            self._set_status(f"✅ Xử lý xong! Kết quả: {w}×{h}px")
+            self._set_status(f"✅ Xong — Đang xem ở 100% zoom | Kéo thanh split để so sánh | {w}×{h}px")
 
     def _on_process_error(self, msg: str):
         self.after(0, lambda: self._handle_error(msg))

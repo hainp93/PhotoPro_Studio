@@ -256,7 +256,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._sharpen_on.pack(anchor="w", pady=(2, 4))
 
         self._sharpen_amount, _ = _labeled_slider(
-            c, "Mức độ", 0, 3, 1.5, fmt=".1f", accent=ACCENT_SHARPEN
+            c, "Mức độ", 0, 3, 2.5, fmt=".1f", accent=ACCENT_SHARPEN
         )
         self._sharpen_radius, _ = _labeled_slider(
             c, "Radius (px)", 0.1, 5, 1.0, fmt=".1f", accent=ACCENT_SHARPEN

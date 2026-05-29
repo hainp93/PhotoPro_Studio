@@ -128,12 +128,14 @@ class ImageViewer(ctk.CTkFrame):
     def set_after(self, image: np.ndarray | None):
         self._after_img = image
         if image is not None:
-            # Chuyển sang Split mode để so sánh trước/sau rõ ràng
+            # Chuyển sang Split mode để so sánh trước/sau
             self._split_mode = True
             self._split_pos = 0.5
             self._btn_split.configure(text="Split ▧", fg_color="#23355a", text_color="#7ab3f7")
-            # Zoom 50% để thấy rõ hiệu ứng
-            self._zoom = min(0.5, self._zoom * 1.5)
+            # Zoom 100% — chỉ cách duy nhất thấy rõ hiệu ứng
+            self._zoom = 1.0
+            self._pan_x = 0
+            self._pan_y = 0
         else:
             self._split_mode = True
             self._btn_split.configure(text="Split ▧", fg_color="#23355a", text_color="#7ab3f7")
