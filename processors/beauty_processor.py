@@ -241,24 +241,24 @@ class BeautyProcessor:
         leg_mask = person_mask.copy()
         leg_mask[:hip_y, :] = 0  # Phần trên hông không chỉnh
         
-        # Mở rộng mask xuống tận đáy ảnh để tránh vết cắt ở bàn chân (vectorized)
-        # Tìm hàng cuối cùng có mask > 0.05 theo từng cột
-        has_mask = (leg_mask > 0.05).astype(np.float32)  # (H, W)
-        # cummax từ dưới lên để tìm last_row cho từng cột
-        # Cách nhanh: dùng flip cummax
-        flipped = has_mask[::-1, :]
-        cum = np.maximum.accumulate(flipped, axis=0)
-        bottom_mask = cum[::-1, :]  # 1 ở tất cả hàng từ first_row trở xuống
-        
-        # Tạo gradient fade: ở hàng last_row = 1.0, ở đáy ảnh = 0.0
-        # Dùng khoảng cách từ đáy ảnh: row_from_bottom
-        row_from_bottom = np.arange(h - 1, -1, -1, dtype=np.float32)  # h-1, h-2, ..., 0
-        # Normalize: max_dist = h-1
-        fade_grad = (row_from_bottom / (h - 1))[:, np.newaxis]  # (H, 1), 1.0 ở top, 0.0 ở bottom
-        
-        # Chỉ áp dụng fade ở vùng dưới bàn chân (nơi person_mask gần 0 nhưng bottom_mask = 1)
-        below_feet = (bottom_mask > 0) * (leg_mask < 0.05)
-        leg_mask = leg_mask + below_feet * fade_grad * 0.6  # Thêm gradient mờ dần ở dưới chân
+        # Mở rộng mask xuống dưới bàn chân: dùng bbox y2 + padding
+        if len(results) > 0 and results[0].boxes is not None:
+            boxes_np = results[0].boxes.xyxy.cpu().numpy()
+            for box in boxes_np:
+                bx1, by1, bx2, by2 = [int(v) for v in box]
+                feet_padding = int(h * 0.05)  # 5% chiều cao ảnh
+                foot_bottom = min(h, by2 + feet_padding)
+                col_s = max(0, bx1)
+                col_e = min(w, bx2)
+                if by2 > hip_y and col_e > col_s:
+                    anchor_row = min(by2, h - 1)
+                    anchor_vals = leg_mask[anchor_row, col_s:col_e].copy()
+                    for yi in range(anchor_row, foot_bottom):
+                        t = (yi - anchor_row) / max(1, feet_padding)
+                        leg_mask[yi, col_s:col_e] = np.maximum(
+                            leg_mask[yi, col_s:col_e],
+                            anchor_vals * (1.0 - t * t)
+                        )
         leg_mask = np.clip(leg_mask, 0, 1)
         
         leg_mask = cv2.GaussianBlur(leg_mask, (51, 51), 0)

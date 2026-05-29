@@ -49,6 +49,7 @@ class ImageViewer(ctk.CTkFrame):
         # Body Detection Interactive Mode
         self._interactive_body_mode = False
         self._ai_body_bboxes = []  # [(x1, y1, x2, y2), ...]
+        self._excluded_body_indices = set()  # Chỉ số các bbox bị bỏ qua
         
         self._drawing_box_start = None  # (canvas_x, canvas_y)
         self._temp_box_id = None
@@ -180,11 +181,20 @@ class ImageViewer(ctk.CTkFrame):
             # Force single view on before_img
             self._split_mode = False
             self._ai_body_bboxes = bboxes or []
-            self._canvas.configure(cursor="arrow") # Không cho phép vẽ manual body
+            self._excluded_body_indices = set()  # Reset khi quét lại
+            self._canvas.configure(cursor="hand2")  # Con trỏ bàn tay để chỉ rõ có thể click
         else:
             self._ai_body_bboxes = []
+            self._excluded_body_indices = set()
             self._canvas.configure(cursor="crosshair")
         self._redraw()
+
+    def get_active_body_bboxes(self) -> list:
+        """Trả về danh sách bboxes cơ thể chưa bị loại bỏ."""
+        return [
+            bbox for i, bbox in enumerate(self._ai_body_bboxes)
+            if i not in self._excluded_body_indices
+        ]
 
     def clear(self):
         self._before_img = None
@@ -327,16 +337,20 @@ class ImageViewer(ctk.CTkFrame):
                     self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00e676", width=2, dash=(4, 2))
                     
         if self._interactive_body_mode:
-            # Vẽ body bbox (màu xanh lá)
-            for bbox in self._ai_body_bboxes:
+            # Vẽ body bbox
+            for i, bbox in enumerate(self._ai_body_bboxes):
                 x1, y1, x2, y2 = bbox
                 cx1, cy1 = self._img_to_canvas(x1, y1)
                 cx2, cy2 = self._img_to_canvas(x2, y2)
                 if cx2 > 0 and cy2 > 0 and cx1 < cw and cy1 < ch:
-                    self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00ff00", width=2, dash=(4, 4))
-                    
-                    # Vẽ text "Người"
-                    self._canvas.create_text(cx1, cy1 - 10, text="Người", fill="#00ff00", font=("Inter", 10, "bold"), anchor="w")
+                    if i in self._excluded_body_indices:
+                        # Bbox bị bỏ qua: màu đỏ
+                        self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#ff3333", width=2, dash=(4, 4))
+                        self._canvas.create_text(cx1, cy1 - 10, text="Bỏ qua ✕", fill="#ff3333", font=("Inter", 10, "bold"), anchor="w")
+                    else:
+                        # Bbox hợp lệ: màu xanh lá
+                        self._canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#00ff00", width=2, dash=(4, 4))
+                        self._canvas.create_text(cx1, cy1 - 10, text="Người ✓", fill="#00ff00", font=("Inter", 10, "bold"), anchor="w")
 
 
     def _draw_split(self, cw: int, ch: int):
@@ -408,6 +422,23 @@ class ImageViewer(ctk.CTkFrame):
         if self._interactive_face_mode:
             # Vẽ hình chữ nhật mới
             self._drawing_box_start = (event.x, event.y)
+            return
+            
+        if self._interactive_body_mode:
+            # Click vào body bbox để toggle exclude/include
+            img = self._before_img if self._before_img is not None else self._after_img
+            if img is not None:
+                for i, bbox in enumerate(self._ai_body_bboxes):
+                    x1, y1, x2, y2 = bbox
+                    cx1, cy1 = self._img_to_canvas(x1, y1)
+                    cx2, cy2 = self._img_to_canvas(x2, y2)
+                    if cx1 <= event.x <= cx2 and cy1 <= event.y <= cy2:
+                        if i in self._excluded_body_indices:
+                            self._excluded_body_indices.discard(i)
+                        else:
+                            self._excluded_body_indices.add(i)
+                        self._redraw()
+                        return
             return
 
         # Check nếu click gần divider — vùng bắt rộng 20px
