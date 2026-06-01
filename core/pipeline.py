@@ -295,6 +295,7 @@ class Pipeline:
                 result = sharpened_result
 
         # ── Step 4: Face Restore (optional) ─────────────────────────
+        _face_bboxes: list = []  # lưu lại để Step 5 dùng
         if s.face_restore_enabled and not cancel_flag.is_set():
             _progress("Đang phục hồi khuôn mặt (AI)...")
             logger.debug(f"Pipeline: Face Restore model={s.face_restore_model}")
@@ -316,11 +317,79 @@ class Pipeline:
                         proc.add_manual_face(bbox)
                 
                 result = proc.restore_faces(fidelity=s.face_restore_fidelity)
+                
+                # Lưu bbox mặt trước khi unload (dùng ở Step 5)
+                _face_bboxes = proc.get_face_bboxes()
+                logger.debug(f"Step 4: lưu {len(_face_bboxes)} face bboxes cho Body Sharpen")
                 proc.unload()
             except Exception as e:
                 msg = f"Face Restore thất bại: {e}"
                 logger.warning(msg)
                 warnings.append(msg)
+
+        # ── Step 5: Body Sharpen (cân bằng độ nét body vs mặt AI) ───────
+        # Sau khi CodeFormer nâng cấp mặt lên cực nét, body cần được sharpen
+        # mạnh hơn để không bị "giả" so với mặt.
+        if s.face_restore_enabled and s.sharpen_enabled and not cancel_flag.is_set():
+            _progress("Đang làm nét cơ thể...")
+            logger.debug("Pipeline: Body Sharpen (post face-restore)")
+            try:
+                proc_sharp = self._get_processor("sharpener")
+                proc_seg   = self._get_processor("person_segmenter")
+
+                # Sharpen boost 1.5× so với pass trên (body cần nét hơn)
+                body_amount = min(s.sharpen_amount * 1.5, 3.0)
+                body_radius = s.sharpen_radius
+                body_thresh = max(0, s.sharpen_threshold - 1)
+
+                if s.sharpen_method == "USM":
+                    sharpened_body = proc_sharp.process_usm(
+                        result,
+                        amount=body_amount,
+                        radius=body_radius,
+                        threshold=body_thresh,
+                    )
+                else:
+                    sharpened_body = proc_sharp.process(
+                        result,
+                        amount=body_amount,
+                        radius=body_radius,
+                        threshold=body_thresh,
+                    )
+
+                # Person mask (toàn cơ thể)
+                person_mask = proc_seg.get_person_mask(result, feather_amount=21)
+
+                # Face exclusion mask: dilate bbox mặt rồi blur mịn
+                h_img, w_img = result.shape[:2]
+                face_excl = np.zeros((h_img, w_img), dtype=np.float32)
+                for bbox in _face_bboxes:
+                    x1, y1, x2, y2 = map(int, bbox)
+                    bw, bh = max(1, x2 - x1), max(1, y2 - y1)
+                    # Nới rộng 30% quanh mặt để transition không bị cứng
+                    px, py = int(bw * 0.30), int(bh * 0.30)
+                    fx1 = max(0, x1 - px)
+                    fy1 = max(0, y1 - py)
+                    fx2 = min(w_img, x2 + px)
+                    fy2 = min(h_img, y2 + py)
+                    face_excl[fy1:fy2, fx1:fx2] = 1.0
+
+                # Blur face_excl để viền chuyển tiếp mịn (≈5% chiều nhỏ hơn ảnh)
+                blur_k = max(31, int(min(h_img, w_img) * 0.05) | 1)
+                face_excl = cv2.GaussianBlur(face_excl, (blur_k, blur_k), 0)
+
+                # Body mask = person − face (chỉ sharpen tóc/da/quần áo ngoài mặt)
+                body_mask = np.clip(person_mask - face_excl, 0.0, 1.0)
+
+                mask_3d = np.repeat(body_mask[:, :, np.newaxis], 3, axis=2)
+                result = (
+                    result.astype(np.float32) * (1.0 - mask_3d)
+                    + sharpened_body.astype(np.float32) * mask_3d
+                ).astype(np.uint8)
+                logger.debug("Body Sharpen hoàn thành")
+            except Exception as e:
+                logger.warning(f"Body Sharpen thất bại: {e}")
+                warnings.append(f"Body post-sharpen lỗi: {e}")
 
         if warnings:
             warn_summary = "\n".join(f"⚠ {w}" for w in warnings)

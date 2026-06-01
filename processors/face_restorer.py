@@ -333,6 +333,14 @@ class FaceRestorer:
         return result
 
 
+    def get_face_bboxes(self) -> list:
+        """Trả về list [x1, y1, x2, y2] của các khuôn mặt đã detect (trước khi unload)."""
+        bboxes = []
+        if hasattr(self, 'face_helper') and self.face_helper is not None:
+            for face in self.face_helper.det_faces:
+                bboxes.append([float(v) for v in face[:4]])
+        return bboxes
+
     def unload(self):
         self._net = None
         self._bg_upsampler = None
